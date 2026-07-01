@@ -29,26 +29,38 @@ class FetchCapitalHistory extends Command
 
     private function importActivities(CapitalApiService $capital): void
     {
-        $activities = $capital->getActivity(86400)['activities'] ?? [];
+        $activities = collect($capital->getActivity(86400)['activities'] ?? [])
+            ->filter(fn (array $a) => ($a['type'] ?? null) === 'POSITION' && ($a['status'] ?? null) === 'ACCEPTED')
+            ->sortBy('date');
 
-        foreach ($activities as $activity) {
-            if (($activity['type'] ?? null) !== 'POSITION' || ($activity['status'] ?? null) !== 'ACCEPTED') {
-                continue;
+        // open_price is null on a position's first (opening) activity and set to
+        // the original entry level on every later (closing/exit) activity for the
+        // same deal_id — the frontend uses this to distinguish "Eröffnung" from
+        // "Schliessung" rows.
+        foreach ($activities->groupBy('dealId') as $dealId => $group) {
+            $openLevel = Activity::where('deal_id', $dealId)->orderBy('date_utc')->value('level');
+
+            foreach ($group as $activity) {
+                $details = $activity['details'] ?? [];
+                $level = $details['level'] ?? null;
+                $isOpening = $openLevel === null;
+
+                Activity::upsert([
+                    'deal_id' => $dealId,
+                    'date_utc' => $activity['date'] ?? null,
+                    'epic' => $activity['epic'] ?? null,
+                    'instrument' => $activity['marketName'] ?? null,
+                    'direction' => $details['direction'] ?? null,
+                    'size' => $details['size'] ?? null,
+                    'level' => $level,
+                    'open_price' => $isOpening ? null : $openLevel,
+                    'source' => $activity['source'] ?? null,
+                ], ['deal_id', 'date_utc']);
+
+                if ($isOpening) {
+                    $openLevel = $level;
+                }
             }
-
-            $details = $activity['details'] ?? [];
-
-            Activity::upsert([
-                'deal_id' => $activity['dealId'] ?? null,
-                'date_utc' => $activity['date'] ?? null,
-                'epic' => $activity['epic'] ?? null,
-                'instrument' => $activity['marketName'] ?? null,
-                'direction' => $details['direction'] ?? null,
-                'size' => $details['size'] ?? null,
-                'level' => $details['level'] ?? null,
-                'open_price' => $details['level'] ?? null,
-                'source' => $activity['source'] ?? null,
-            ], ['deal_id', 'date_utc']);
         }
     }
 

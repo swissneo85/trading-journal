@@ -16,7 +16,7 @@ class TradeController extends Controller
                 fm.date_utc AS open_time,
                 fm.instrument AS instrument,
                 fm.direction AS open_direction,
-                fm.open_price AS entry_price,
+                fm.level AS entry_price,
                 COALESCE(ex.num_exits, 0) AS num_exits,
                 ex.exit_reasons AS exit_reasons,
                 ex.close_time AS close_time,
