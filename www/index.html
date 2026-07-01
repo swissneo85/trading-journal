@@ -66,6 +66,7 @@
     <nav style="display:flex;gap:24px;">
       <button class="tab-btn" :class="tab==='trades'?'active':''" @click="tab='trades'">Trades</button>
       <button class="tab-btn" :class="tab==='import'?'active':''" @click="tab='import'">Import</button>
+      <button class="tab-btn" :class="tab==='settings'?'active':''" @click="tab='settings'; loadSettings()">Settings</button>
     </nav>
   </div>
 </header>
@@ -74,7 +75,7 @@
 
   <!-- LOADING -->
   <div x-show="loading" style="display:flex;align-items:center;justify-content:center;height:300px;">
-    <span class="mono" style="color:var(--muted);font-size:13px;">Lade Daten von Node-RED...</span>
+    <span class="mono" style="color:var(--muted);font-size:13px;">Lade Daten...</span>
   </div>
 
   <!-- ───── TRADES TAB ───── -->
@@ -316,18 +317,18 @@
   <!-- ───── IMPORT TAB ───── -->
   <div x-show="!loading && tab==='import'" style="max-width:600px;margin:0 auto;">
     <div class="card" style="padding:40px;text-align:center;">
-      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:8px;">CSV Import</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:28px;">Capital.com Trades-CSV importieren (Berichte → Trades → Export)</div>
+      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:8px;">Import</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:28px;">JSON-Datei importieren: <span class="mono">{ "activities": [...], "transactions": [...] }</span></div>
 
       <div style="border:2px dashed var(--border);border-radius:8px;padding:40px;margin-bottom:16px;transition:border-color .15s;cursor:pointer;"
         @dragover.prevent="$el.style.borderColor='var(--accent)'"
         @dragleave="$el.style.borderColor='var(--border)'"
         @drop.prevent="handleFileDrop($event)">
-        <input type="file" id="csvFile" accept=".csv" style="display:none;" @change="handleFileSelect($event)">
-        <label for="csvFile" style="cursor:pointer;display:block;">
+        <input type="file" id="importFileInput" accept=".json" style="display:none;" @change="handleFileSelect($event)">
+        <label for="importFileInput" style="cursor:pointer;display:block;">
           <div style="font-size:32px;margin-bottom:12px;">📁</div>
           <div style="font-size:14px;color:#fff;margin-bottom:4px;">Datei hierher ziehen oder klicken</div>
-          <div style="font-size:12px;color:var(--muted);">.csv von Capital.com</div>
+          <div style="font-size:12px;color:var(--muted);">.json mit activities/transactions</div>
         </label>
       </div>
 
@@ -336,18 +337,84 @@
         <span class="mono" style="color:#fff;" x-text="importFile"></span>
       </div>
 
-      <button x-show="importFile" class="btn-primary" @click="uploadCSV()">Importieren</button>
+      <button x-show="importFile" class="btn-primary" @click="uploadImport()">Importieren</button>
 
       <div x-show="importStatus" style="margin-top:16px;padding:12px 16px;border-radius:6px;font-size:13px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:#4ade80;" x-text="importStatus"></div>
       <div x-show="importError"  style="margin-top:16px;padding:12px 16px;border-radius:6px;font-size:13px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#f87171;" x-text="importError"></div>
     </div>
   </div>
 
+  <!-- ───── SETTINGS TAB ───── -->
+  <div x-show="!loading && tab==='settings'" style="max-width:480px;margin:0 auto;">
+    <div class="card" style="padding:32px;">
+      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:24px;">Einstellungen</div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">CAPITAL.COM</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">API Key</div>
+          <input type="password" style="width:100%;" x-model="settings.capital_api_key"
+            :placeholder="settingsMasked.capital_api_key ? 'gesetzt – unverändert lassen zum Beibehalten' : ''">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">E-Mail</div>
+          <input type="email" style="width:100%;" x-model="settings.capital_email">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Passwort</div>
+          <input type="password" style="width:100%;" x-model="settings.capital_password"
+            :placeholder="settingsMasked.capital_password ? 'gesetzt – unverändert lassen zum Beibehalten' : ''">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Base-URL</div>
+          <select style="width:100%;" x-model="capitalUrlMode" @change="onCapitalUrlModeChange()">
+            <option value="live">Live (api-capital.backend-capital.com)</option>
+            <option value="demo">Demo (demo-api-capital.backend-capital.com)</option>
+            <option value="custom">Eigene URL</option>
+          </select>
+        </div>
+        <div x-show="capitalUrlMode==='custom'">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Eigene Base-URL</div>
+          <input type="text" style="width:100%;" x-model="settings.capital_url" placeholder="https://...">
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">POLLING</div>
+      <div style="margin-bottom:28px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Poll-Intervall (Sekunden)</div>
+        <input type="number" min="30" style="width:100%;" x-model.number="settings.poll_interval_seconds">
+      </div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">TELEGRAM</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Bot-Token</div>
+          <input type="password" style="width:100%;" x-model="settings.telegram_bot_token"
+            :placeholder="settingsMasked.telegram_bot_token ? 'gesetzt – unverändert lassen zum Beibehalten' : ''">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Chat-ID</div>
+          <input type="text" style="width:100%;" x-model="settings.telegram_chat_id">
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn-primary" @click="saveSettings()">Speichern</button>
+        <span x-show="settingsStatus" class="profit" style="font-size:12px;" x-text="settingsStatus"></span>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <script>
-// ── API Basis-URL ─────────────────────────────────────────────
-const API = 'http://192.168.10.240:1880/trading';
+// ── API Basis-URL (same-origin, nginx proxied /trading/) ──────
+const API = '/trading';
+const MASK = '●●●●●●';
+const CAPITAL_URLS = {
+  live: 'https://api-capital.backend-capital.com',
+  demo: 'https://demo-api-capital.backend-capital.com',
+};
 
 function journal() {
   return {
@@ -365,6 +432,24 @@ function journal() {
     importStatus: '',
     importError: '',
     chartInstance: null,
+
+    settings: {
+      quellen: '',
+      capital_api_key: '',
+      capital_email: '',
+      capital_password: '',
+      capital_url: '',
+      poll_interval_seconds: 60,
+      telegram_bot_token: '',
+      telegram_chat_id: '',
+    },
+    settingsMasked: {
+      capital_api_key: false,
+      capital_password: false,
+      telegram_bot_token: false,
+    },
+    capitalUrlMode: 'live',
+    settingsStatus: '',
 
     async init() {
       this.$watch('loading', (val) => {
@@ -521,22 +606,23 @@ function journal() {
 
     handleFileDrop(e) {
       const f = e.dataTransfer.files[0];
-      if (f && f.name.endsWith('.csv')) {
+      if (f && f.name.endsWith('.json')) {
         this.importFile = f.name;
         this.importFileObj = f;
       }
     },
 
-    async uploadCSV() {
+    async uploadImport() {
       if (!this.importFileObj) return;
       this.importStatus = '';
       this.importError  = '';
       try {
         const text = await this.importFileObj.text();
+        const payload = JSON.parse(text);
         const res  = await fetch(API + '/import', {
           method: 'POST',
-          headers: { 'Content-Type': 'text/csv' },
-          body: text
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
         const result = await res.json();
         this.importStatus = '✅ ' + (result.message || 'Import abgeschlossen');
@@ -545,6 +631,52 @@ function journal() {
       } catch(e) {
         this.importError = '❌ Fehler: ' + e.message;
       }
+    },
+
+    async loadSettings() {
+      const res = await fetch(API + '/settings');
+      const data = await res.json();
+
+      for (const key of Object.keys(this.settings)) {
+        if (data[key] === undefined) continue;
+
+        if (this.settingsMasked[key] !== undefined) {
+          this.settingsMasked[key] = data[key] === MASK;
+          this.settings[key] = this.settingsMasked[key] ? '' : data[key];
+        } else {
+          this.settings[key] = data[key];
+        }
+      }
+
+      this.capitalUrlMode = Object.entries(CAPITAL_URLS).find(
+        ([, url]) => url === this.settings.capital_url
+      )?.[0] || 'custom';
+    },
+
+    onCapitalUrlModeChange() {
+      if (this.capitalUrlMode !== 'custom') {
+        this.settings.capital_url = CAPITAL_URLS[this.capitalUrlMode];
+      }
+    },
+
+    async saveSettings() {
+      const payload = {};
+
+      for (const [key, value] of Object.entries(this.settings)) {
+        if (key in this.settingsMasked && value === '') {
+          continue; // untouched secret field, keep server value
+        }
+        payload[key] = value;
+      }
+
+      const res = await fetch(API + '/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      this.settingsStatus = data.message || 'Gespeichert';
+      this.loadSettings();
     },
 
     formatDate(iso) {
