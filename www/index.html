@@ -368,13 +368,7 @@ function journal() {
 
     async init() {
       this.$watch('loading', (val) => {
-        if (!val) {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              this.renderChart();
-            });
-          });
-        }
+        if (!val) setTimeout(() => this.renderChart(), 400);
       });
       await this.loadData();
       this.$nextTick(() => this.renderChart());
@@ -441,12 +435,11 @@ function journal() {
 
     renderChart() {
       const canvas = document.getElementById('equityChart');
-      if (!canvas || canvas.offsetWidth === 0) {
-        setTimeout(() => this.renderChart(), 300);
+      if (!canvas || canvas.offsetParent === null || canvas.offsetWidth === 0) {
+        setTimeout(() => this.renderChart(), 400);
         return;
       }
       if (this.chartInstance) this.chartInstance.destroy();
-      const ctx = canvas.getContext('2d');
 
       const closed = [...this.trades]
         .filter(t => t.pl_chf !== null && t.close_time)
@@ -454,7 +447,7 @@ function journal() {
 
       let cum = 0;
       const labels = ['Start'];
-      const data   = [0];
+      const data = [0];
       closed.forEach(t => {
         cum += t.pl_chf || 0;
         labels.push(this.formatDate(t.close_time));
@@ -462,10 +455,10 @@ function journal() {
       });
 
       const positive = (data[data.length - 1] || 0) >= 0;
-      const lineCol  = positive ? '#22c55e' : '#ef4444';
-      const fillCol  = positive ? 'rgba(34,197,94,0.07)' : 'rgba(239,68,68,0.07)';
+      const lineCol = positive ? '#22c55e' : '#ef4444';
+      const fillCol = positive ? 'rgba(34,197,94,0.07)' : 'rgba(239,68,68,0.07)';
 
-      this.chartInstance = new Chart(ctx, {
+      this.chartInstance = new Chart(canvas, {
         type: 'line',
         data: {
           labels,
@@ -476,8 +469,6 @@ function journal() {
             borderWidth: 2,
             pointRadius: 4,
             pointBackgroundColor: lineCol,
-            pointBorderColor: 'var(--surface)',
-            pointBorderWidth: 2,
             fill: true,
             tension: 0.35
           }]
@@ -485,31 +476,10 @@ function journal() {
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              backgroundColor: '#0d1526',
-              borderColor: '#1a2a45',
-              borderWidth: 1,
-              titleColor: '#94a3b8',
-              bodyColor: '#fff',
-              bodyFont: { family: 'JetBrains Mono', size: 12 },
-              callbacks: { label: ctx => (ctx.raw >= 0 ? '+' : '') + ctx.raw + ' CHF' }
-            }
-          },
+          plugins: { legend: { display: false } },
           scales: {
-            x: {
-              ticks: { color: '#64748b', font: { size: 10, family: 'JetBrains Mono' }, maxRotation: 0 },
-              grid:  { color: 'rgba(26,42,69,0.7)', drawBorder: false }
-            },
-            y: {
-              ticks: {
-                color: '#64748b',
-                font:  { size: 10, family: 'JetBrains Mono' },
-                callback: v => (v >= 0 ? '+' : '') + v + ' CHF'
-              },
-              grid: { color: 'rgba(26,42,69,0.7)', drawBorder: false }
-            }
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(26,42,69,0.7)' } },
+            y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => (v>=0?'+':'')+v+' CHF' }, grid: { color: 'rgba(26,42,69,0.7)' } }
           }
         }
       });
