@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Journal</title>
+<script defer src="vendor/alpine.min.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div x-data="app()" x-init="init()" class="app">
+
+    <header class="tabs">
+        <h1>Trading Journal</h1>
+        <nav>
+            <button :class="{active: tab==='trades'}" @click="tab='trades'">Trades</button>
+            <button :class="{active: tab==='import'}" @click="tab='import'">Import</button>
+            <button :class="{active: tab==='settings'}" @click="tab='settings'; loadSettings()">Settings</button>
+        </nav>
+    </header>
+
+    <!-- ===================== TRADES TAB ===================== -->
+    <section x-show="tab==='trades'" x-cloak>
+        <div class="toolbar">
+            <button @click="loadTrades()">↻ Aktualisieren</button>
+        </div>
+
+        <table class="trades-table">
+            <thead>
+                <tr>
+                    <th>Instrument</th>
+                    <th>Richtung</th>
+                    <th>Eröffnet</th>
+                    <th>Geschlossen</th>
+                    <th>Entry</th>
+                    <th>Exits</th>
+                    <th>P/L (CHF)</th>
+                    <th>Quelle</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="trade in trades" :key="trade.deal_id">
+                    <tr @click="selectTrade(trade)" class="trade-row" :class="{selected: selectedTrade && selectedTrade.deal_id === trade.deal_id}">
+                        <td x-text="trade.instrument || '–'"></td>
+                        <td x-text="trade.open_direction || '–'"></td>
+                        <td x-text="formatDate(trade.open_time)"></td>
+                        <td x-text="formatDate(trade.close_time) || 'offen'"></td>
+                        <td x-text="trade.entry_price ?? '–'"></td>
+                        <td x-text="trade.num_exits ?? 0"></td>
+                        <td :class="{profit: trade.pl_chf > 0, loss: trade.pl_chf < 0}" x-text="trade.pl_chf ?? '–'"></td>
+                        <td x-text="trade.quelle || '–'"></td>
+                    </tr>
+                </template>
+                <tr x-show="trades.length === 0">
+                    <td colspan="8" class="empty">Keine Trades vorhanden.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Detail / Tag Panel -->
+        <div class="detail-panel" x-show="selectedTrade" x-cloak>
+            <h2>
+                Details:
+                <span x-text="selectedTrade?.instrument"></span>
+                (<span x-text="selectedTrade?.deal_id"></span>)
+            </h2>
+
+            <table class="detail-table">
+                <thead>
+                    <tr>
+                        <th>Zeit</th>
+                        <th>Richtung</th>
+                        <th>Größe</th>
+                        <th>Level</th>
+                        <th>Quelle/Reason</th>
+                        <th>P/L (CHF)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="row in detail" :key="row.date_utc">
+                        <tr>
+                            <td x-text="formatDate(row.date_utc)"></td>
+                            <td x-text="row.direction || '–'"></td>
+                            <td x-text="row.size ?? '–'"></td>
+                            <td x-text="row.level ?? '–'"></td>
+                            <td x-text="row.source || '–'"></td>
+                            <td x-text="row.pl_chf ?? '–'"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+
+            <form @submit.prevent="saveTag()" class="tag-form">
+                <label>
+                    Quelle
+                    <select x-model="tagForm.quelle">
+                        <option value="">– keine –</option>
+                        <template x-for="q in quellenList" :key="q">
+                            <option :value="q" x-text="q"></option>
+                        </template>
+                    </select>
+                </label>
+                <label>
+                    Notiz
+                    <textarea x-model="tagForm.notiz" rows="3"></textarea>
+                </label>
+                <button type="submit">Speichern</button>
+                <span class="status" x-show="tagStatus" x-text="tagStatus"></span>
+            </form>
+        </div>
+    </section>
+
+    <!-- ===================== IMPORT TAB ===================== -->
+    <section x-show="tab==='import'" x-cloak>
+        <h2>Activities &amp; Transactions importieren</h2>
+        <p>JSON im Format <code>{ "activities": [...], "transactions": [...] }</code> einfügen:</p>
+        <textarea x-model="importText" rows="14" class="import-textarea" placeholder='{"activities": [], "transactions": []}'></textarea>
+        <div class="toolbar">
+            <button @click="runImport()">Importieren</button>
+            <span class="status" x-show="importStatus" x-text="importStatus"></span>
+        </div>
+    </section>
+
+    <!-- ===================== SETTINGS TAB ===================== -->
+    <section x-show="tab==='settings'" x-cloak>
+        <h2>Einstellungen</h2>
+        <form @submit.prevent="saveSettings()" class="settings-form">
+
+            <fieldset>
+                <legend>Capital.com</legend>
+
+                <label>
+                    API Key
+                    <input type="password" x-model="settings.capital_api_key"
+                           :placeholder="settingsMasked.capital_api_key ? 'gesetzt (unverändert lassen zum Beibehalten)' : ''">
+                </label>
+
+                <label>
+                    E-Mail
+                    <input type="email" x-model="settings.capital_email">
+                </label>
+
+                <label>
+                    Passwort
+                    <input type="password" x-model="settings.capital_password"
+                           :placeholder="settingsMasked.capital_password ? 'gesetzt (unverändert lassen zum Beibehalten)' : ''">
+                </label>
+
+                <label>
+                    Base-URL
+                    <select x-model="capitalUrlMode" @change="onCapitalUrlModeChange()">
+                        <option value="live">Live (api-capital.backend-capital.com)</option>
+                        <option value="demo">Demo (demo-api-capital.backend-capital.com)</option>
+                        <option value="custom">Eigene URL</option>
+                    </select>
+                </label>
+                <label x-show="capitalUrlMode === 'custom'">
+                    Eigene Base-URL
+                    <input type="text" x-model="settings.capital_url" placeholder="https://...">
+                </label>
+            </fieldset>
+
+            <fieldset>
+                <legend>Polling</legend>
+                <label>
+                    Poll-Intervall (Sekunden)
+                    <input type="number" min="30" x-model.number="settings.poll_interval_seconds">
+                </label>
+            </fieldset>
+
+            <fieldset>
+                <legend>Telegram</legend>
+                <label>
+                    Bot-Token
+                    <input type="password" x-model="settings.telegram_bot_token"
+                           :placeholder="settingsMasked.telegram_bot_token ? 'gesetzt (unverändert lassen zum Beibehalten)' : ''">
+                </label>
+                <label>
+                    Chat-ID
+                    <input type="text" x-model="settings.telegram_chat_id">
+                </label>
+            </fieldset>
+
+            <div class="toolbar">
+                <button type="submit">Speichern</button>
+                <span class="status" x-show="settingsStatus" x-text="settingsStatus"></span>
+            </div>
+        </form>
+    </section>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
