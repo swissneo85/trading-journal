@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Activity;
+use App\Models\ActivityLog;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -52,6 +53,8 @@ class ImportController extends Controller
             Transaction::updateOrCreate(['reference' => $data['reference']], $data);
             $transactionCount++;
         }
+
+        ActivityLog::log('import', "CSV Import: {$activityCount} Activities, {$transactionCount} Transactions");
 
         return response()->json([
             'message' => "✅ {$activityCount} Activities, {$transactionCount} Transactions importiert",

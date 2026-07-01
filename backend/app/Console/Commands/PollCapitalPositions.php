@@ -2,8 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ActivityLog;
 use App\Models\ConfigEntry;
+use App\Models\Source;
 use App\Services\CapitalApiService;
+use App\Services\HistorySyncService;
 use App\Services\TelegramService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -16,7 +19,7 @@ use Throwable;
 #[Description('Pollt offene Positionen von Capital.com und benachrichtigt bei neuen via Telegram')]
 class PollCapitalPositions extends Command
 {
-    public function handle(CapitalApiService $capital, TelegramService $telegram): int
+    public function handle(CapitalApiService $capital, TelegramService $telegram, HistorySyncService $historySync): int
     {
         $intervalSeconds = (int) (ConfigEntry::find('poll_interval_seconds')?->value ?? 60);
 
@@ -29,6 +32,7 @@ class PollCapitalPositions extends Command
             $positions = collect($capital->getPositions()['positions'] ?? []);
         } catch (Throwable $e) {
             Log::warning('PollCapitalPositions: '.$e->getMessage());
+            ActivityLog::log('error', 'PollCapitalPositions: '.$e->getMessage());
 
             return self::SUCCESS;
         }
@@ -37,11 +41,10 @@ class PollCapitalPositions extends Command
         $currentIds = $entriesByDealId->keys()->filter()->values()->all();
         $knownIds = Cache::get('known_deal_ids', []);
         $newIds = array_diff($currentIds, $knownIds);
+        $closedIds = array_diff($knownIds, $currentIds);
 
         if ($newIds) {
-            $quellen = array_values(array_filter(array_map('trim', explode(
-                ',', ConfigEntry::find('quellen')?->value ?? ''
-            ))));
+            $quellen = Source::where('archived', false)->pluck('name')->all();
 
             foreach ($newIds as $dealId) {
                 $entry = $entriesByDealId->get($dealId);
@@ -53,9 +56,32 @@ class PollCapitalPositions extends Command
             }
         }
 
+        if ($closedIds) {
+            $this->syncAfterClose($historySync);
+        }
+
         Cache::put('known_deal_ids', $currentIds, now()->addDays(7));
 
+        ActivityLog::log('poll', sprintf(
+            'Poll: %d offen, %d neu, %d geschlossen',
+            count($currentIds), count($newIds), count($closedIds)
+        ));
+
         return self::SUCCESS;
+    }
+
+    private function syncAfterClose(HistorySyncService $historySync): void
+    {
+        try {
+            $result = $historySync->sync(3600);
+
+            ActivityLog::log('history_fetch',
+                'Sofort-Abruf nach Schliessung: '.$result['activities'].' Activities, '.
+                $result['transactions'].' Transactions');
+        } catch (Throwable $e) {
+            Log::warning('PollCapitalPositions: Sofort-Abruf fehlgeschlagen: '.$e->getMessage());
+            ActivityLog::log('error', 'PollCapitalPositions: Sofort-Abruf fehlgeschlagen: '.$e->getMessage());
+        }
     }
 
     private function notifyNewPosition(TelegramService $telegram, string $dealId, array $entry, array $quellen): void
