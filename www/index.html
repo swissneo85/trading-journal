@@ -1,194 +1,716 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trading Journal</title>
-<script defer src="vendor/alpine.min.js"></script>
-<link rel="stylesheet" href="app.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading Journal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #060c1a;
+      --surface:  #0d1526;
+      --surface2: #111e36;
+      --border:   #1a2a45;
+      --text:     #cbd5e1;
+      --muted:    #64748b;
+      --accent:   #3b82f6;
+      --profit:   #22c55e;
+      --loss:     #ef4444;
+      --open:     #f59e0b;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; margin: 0; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+    .profit   { color: var(--profit); }
+    .loss     { color: var(--loss); }
+    .openpos  { color: var(--open); }
+    .glow-profit { color: var(--profit); text-shadow: 0 0 28px rgba(34,197,94,0.4); }
+    .glow-loss   { color: var(--loss);   text-shadow: 0 0 28px rgba(239,68,68,0.4); }
+    .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 500; }
+    .badge-long { background: rgba(34,197,94,.12);  color: #4ade80; border: 1px solid rgba(34,197,94,.2); }
+    .badge-short{ background: rgba(239,68,68,.12);  color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+    .badge-sl   { background: rgba(239,68,68,.12);  color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+    .badge-tp   { background: rgba(34,197,94,.12);  color: #4ade80; border: 1px solid rgba(34,197,94,.2); }
+    .badge-user { background: rgba(59,130,246,.12); color: #60a5fa; border: 1px solid rgba(59,130,246,.2); }
+    .badge-src  { background: rgba(59,130,246,.10); color: #93c5fd; border: 1px solid rgba(59,130,246,.2); }
+    tr.trade-row:hover td { background: rgba(59,130,246,.04); cursor: pointer; }
+    tr.detail-row td { background: #090f1d; }
+    .tab-btn { padding: 4px 0; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .15s; color: var(--muted); background: none; border-top: none; border-left: none; border-right: none; cursor: pointer; }
+    .tab-btn.active { color: #fff; border-bottom-color: var(--accent); }
+    input, select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 12px; font-size: 13px; outline: none; font-family: 'Inter', sans-serif; }
+    input:focus, select:focus { border-color: var(--accent); }
+    .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'Inter', sans-serif; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif; }
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+    th { text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    td { padding: 11px 16px; font-size: 13px; border-bottom: 1px solid rgba(26,42,69,.6); }
+    .detail-th { font-size: 11px; font-weight: 600; letter-spacing: .05em; color: var(--muted); padding: 6px 12px 6px 0; border-bottom: 1px solid var(--border); }
+    .detail-td { font-size: 12px; padding: 7px 12px 7px 0; border-bottom: 1px solid rgba(26,42,69,.4); }
+    [x-cloak] { display: none !important; }
+  </style>
 </head>
-<body>
-<div x-data="app()" x-init="init()" class="app">
+<body x-data="journal()" x-init="init()" x-cloak>
 
-    <header class="tabs">
-        <h1>Trading Journal</h1>
-        <nav>
-            <button :class="{active: tab==='trades'}" @click="tab='trades'">Trades</button>
-            <button :class="{active: tab==='import'}" @click="tab='import'">Import</button>
-            <button :class="{active: tab==='settings'}" @click="tab='settings'; loadSettings()">Settings</button>
-        </nav>
-    </header>
+<!-- ───── HEADER ───── -->
+<header style="background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;">
+  <div style="max-width:1280px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:15px;font-weight:600;color:#fff;letter-spacing:-.01em;">📈 Trading Journal</span>
+      <span class="mono" style="font-size:11px;color:var(--muted);">Capital.com · CHF</span>
+    </div>
+    <nav style="display:flex;gap:24px;">
+      <button class="tab-btn" :class="tab==='trades'?'active':''" @click="tab='trades'">Trades</button>
+      <button class="tab-btn" :class="tab==='import'?'active':''" @click="tab='import'">Import</button>
+      <button class="tab-btn" :class="tab==='settings'?'active':''" @click="tab='settings'; loadSettings()">Settings</button>
+    </nav>
+  </div>
+</header>
 
-    <!-- ===================== TRADES TAB ===================== -->
-    <section x-show="tab==='trades'" x-cloak>
-        <div class="toolbar">
-            <button @click="loadTrades()">↻ Aktualisieren</button>
+<main style="max-width:1280px;margin:0 auto;padding:24px;">
+
+  <!-- LOADING -->
+  <div x-show="loading" style="display:flex;align-items:center;justify-content:center;height:300px;">
+    <span class="mono" style="color:var(--muted);font-size:13px;">Lade Daten...</span>
+  </div>
+
+  <!-- ───── TRADES TAB ───── -->
+  <div x-show="!loading && tab==='trades'">
+
+    <!-- KPI Cards -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px;">
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">GESAMT P/L</div>
+        <div class="mono" style="font-size:26px;font-weight:500;"
+          :class="kpis.totalPL >= 0 ? 'glow-profit' : 'glow-loss'"
+          x-text="formatPL(kpis.totalPL) + ' CHF'"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;" x-text="kpis.closed + ' abgeschlossen'"></div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">WIN RATE</div>
+        <div class="mono" style="font-size:26px;font-weight:500;color:#fff;" x-text="kpis.winRate + '%'"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;" x-text="kpis.wins + 'W · ' + kpis.losses + 'L'"></div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">Ø GEWINN</div>
+        <div class="mono profit" style="font-size:26px;font-weight:500;" x-text="formatPL(kpis.avgWin) + ' CHF'"></div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">Ø VERLUST</div>
+        <div class="mono loss" style="font-size:26px;font-weight:500;" x-text="formatPL(kpis.avgLoss) + ' CHF'"></div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">OFFEN</div>
+        <div class="mono openpos" style="font-size:26px;font-weight:500;" x-text="kpis.open"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Positionen</div>
+      </div>
+
+    </div>
+
+    <!-- Equity Curve -->
+    <div class="card" style="padding:20px;margin-bottom:24px;">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">EQUITY CURVE</div>
+      <div style="height:160px;position:relative;">
+        <canvas id="equityChart" x-ref="equityChart" style="display:block;"></canvas>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card" style="padding:16px;margin-bottom:16px;">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Instrument</div>
+          <select x-model="filter.instrument" style="min-width:110px;">
+            <option value="">Alle</option>
+            <option value="Gold">Gold</option>
+          </select>
         </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Richtung</div>
+          <select x-model="filter.direction" style="min-width:100px;">
+            <option value="">Alle</option>
+            <option value="BUY">Long</option>
+            <option value="SELL">Short</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Quelle</div>
+          <select x-model="filter.quelle" style="min-width:130px;">
+            <option value="">Alle</option>
+            <template x-for="q in quellen" :key="q"><option :value="q" x-text="q"></option></template>
+            <option value="__none__">Ohne Tag</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Ergebnis</div>
+          <select x-model="filter.result" style="min-width:110px;">
+            <option value="">Alle</option>
+            <option value="win">Gewinner</option>
+            <option value="loss">Verlierer</option>
+            <option value="open">Offen</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Von</div>
+          <input type="date" x-model="filter.dateFrom">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Bis</div>
+          <input type="date" x-model="filter.dateTo">
+        </div>
+        <button class="btn-ghost" @click="resetFilters()">Zurücksetzen</button>
+      </div>
+    </div>
 
-        <table class="trades-table">
-            <thead>
-                <tr>
-                    <th>Instrument</th>
-                    <th>Richtung</th>
-                    <th>Eröffnet</th>
-                    <th>Geschlossen</th>
-                    <th>Entry</th>
-                    <th>Exits</th>
-                    <th>P/L (CHF)</th>
-                    <th>Quelle</th>
-                </tr>
-            </thead>
-            <tbody>
-                <template x-for="trade in trades" :key="trade.deal_id">
-                    <tr @click="selectTrade(trade)" class="trade-row" :class="{selected: selectedTrade && selectedTrade.deal_id === trade.deal_id}">
-                        <td x-text="trade.instrument || '–'"></td>
-                        <td x-text="trade.open_direction || '–'"></td>
-                        <td x-text="formatDate(trade.open_time)"></td>
-                        <td x-text="formatDate(trade.close_time) || 'offen'"></td>
-                        <td x-text="trade.entry_price ?? '–'"></td>
-                        <td x-text="trade.num_exits ?? 0"></td>
-                        <td :class="{profit: trade.pl_chf > 0, loss: trade.pl_chf < 0}" x-text="trade.pl_chf ?? '–'"></td>
-                        <td x-text="trade.quelle || '–'"></td>
-                    </tr>
-                </template>
-                <tr x-show="trades.length === 0">
-                    <td colspan="8" class="empty">Keine Trades vorhanden.</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <!-- Detail / Tag Panel -->
-        <div class="detail-panel" x-show="selectedTrade" x-cloak>
-            <h2>
-                Details:
-                <span x-text="selectedTrade?.instrument"></span>
-                (<span x-text="selectedTrade?.deal_id"></span>)
-            </h2>
-
-            <table class="detail-table">
-                <thead>
-                    <tr>
-                        <th>Zeit</th>
-                        <th>Richtung</th>
-                        <th>Größe</th>
-                        <th>Level</th>
-                        <th>Quelle/Reason</th>
-                        <th>P/L (CHF)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="row in detail" :key="row.date_utc">
-                        <tr>
-                            <td x-text="formatDate(row.date_utc)"></td>
-                            <td x-text="row.direction || '–'"></td>
-                            <td x-text="row.size ?? '–'"></td>
-                            <td x-text="row.level ?? '–'"></td>
-                            <td x-text="row.source || '–'"></td>
-                            <td x-text="row.pl_chf ?? '–'"></td>
-                        </tr>
+    <!-- Trade Table -->
+    <div class="card" style="overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>DATUM</th>
+            <th>INSTRUMENT</th>
+            <th>RICHTUNG</th>
+            <th style="text-align:right;" class="mono">ENTRY</th>
+            <th style="text-align:right;" class="mono">P/L CHF</th>
+            <th>GRUND</th>
+            <th>QUELLE</th>
+            <th class="mono">DAUER</th>
+          </tr>
+        </thead>
+        <template x-for="trade in filteredTrades" :key="trade.deal_id">
+          <tbody>
+            <!-- Main row -->
+            <tr class="trade-row" @click="toggleDetail(trade.deal_id)">
+              <td class="mono" style="font-size:12px;" x-text="formatDate(trade.open_time)"></td>
+              <td style="font-weight:500;color:#fff;" x-text="trade.instrument || 'Gold'"></td>
+              <td>
+                <span class="badge" :class="trade.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
+                  x-text="trade.open_direction==='BUY' ? 'Long' : 'Short'"></span>
+              </td>
+              <td class="mono" style="text-align:right;" x-text="formatPrice(trade.entry_price)"></td>
+              <td class="mono" style="text-align:right;font-weight:500;">
+                <span x-show="trade.pl_chf===null||trade.pl_chf===undefined" class="openpos">offen</span>
+                <span x-show="trade.pl_chf!==null&&trade.pl_chf!==undefined"
+                  :class="trade.pl_chf>=0 ? 'profit' : 'loss'"
+                  x-text="formatPL(trade.pl_chf)+' CHF'"></span>
+              </td>
+              <td>
+                <template x-if="trade.exit_reasons">
+                  <span>
+                    <template x-for="r in trade.exit_reasons.split(',')" :key="r">
+                      <span class="badge mr-1"
+                        :class="r==='SL'?'badge-sl':r==='TP'?'badge-tp':'badge-user'"
+                        x-text="r.trim()"></span>
                     </template>
-                </tbody>
-            </table>
+                  </span>
+                </template>
+                <span x-show="!trade.exit_reasons" style="color:var(--muted);">—</span>
+              </td>
+              <td>
+                <span x-show="trade.quelle" class="badge badge-src" x-text="trade.quelle"></span>
+                <span x-show="!trade.quelle" style="color:var(--muted);">—</span>
+              </td>
+              <td class="mono" style="font-size:11px;color:var(--muted);" x-text="formatDuration(trade.open_time, trade.close_time)"></td>
+            </tr>
 
-            <form @submit.prevent="saveTag()" class="tag-form">
-                <label>
-                    Quelle
-                    <select x-model="tagForm.quelle">
-                        <option value="">– keine –</option>
-                        <template x-for="q in quellenList" :key="q">
-                            <option :value="q" x-text="q"></option>
+            <!-- Detail row -->
+            <tr class="detail-row" x-show="expandedId===trade.deal_id">
+              <td colspan="8" style="padding:0;">
+                <div style="padding:20px 24px;display:grid;grid-template-columns:1fr 320px;gap:32px;">
+
+                  <!-- Events -->
+                  <div>
+                    <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">EVENTS</div>
+                    <table style="width:100%;border-collapse:collapse;">
+                      <thead>
+                        <tr>
+                          <th class="detail-th" style="padding-left:0;">Typ</th>
+                          <th class="detail-th">Zeit (UTC)</th>
+                          <th class="detail-th mono" style="text-align:right;">Preis</th>
+                          <th class="detail-th mono" style="text-align:right;">Lots</th>
+                          <th class="detail-th">Via</th>
+                          <th class="detail-th mono" style="text-align:right;">P/L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-if="!detail[trade.deal_id]">
+                          <tr><td colspan="6" class="detail-td" style="color:var(--muted);">Lade...</td></tr>
                         </template>
-                    </select>
-                </label>
-                <label>
-                    Notiz
-                    <textarea x-model="tagForm.notiz" rows="3"></textarea>
-                </label>
-                <button type="submit">Speichern</button>
-                <span class="status" x-show="tagStatus" x-text="tagStatus"></span>
-            </form>
+                        <template x-if="detail[trade.deal_id]">
+                          <template x-for="ev in detail[trade.deal_id]" :key="ev.date_utc">
+                            <tr>
+                              <td class="detail-td mono" style="padding-left:0;">
+                                <span x-show="!ev.open_price" style="color:#60a5fa;">Eröffnung</span>
+                                <span x-show="ev.open_price"  style="color:var(--muted);">Schliessung</span>
+                              </td>
+                              <td class="detail-td mono" style="font-size:11px;color:var(--muted);" x-text="formatDateTime(ev.date_utc)"></td>
+                              <td class="detail-td mono" style="text-align:right;" x-text="formatPrice(ev.level)"></td>
+                              <td class="detail-td mono" style="text-align:right;color:var(--muted);" x-text="ev.size||'—'"></td>
+                              <td class="detail-td">
+                                <span x-show="ev.source && ev.open_price" class="badge"
+                                  :class="ev.source==='SL'?'badge-sl':ev.source==='TP'?'badge-tp':'badge-user'"
+                                  x-text="ev.source"></span>
+                                <span x-show="!ev.source || !ev.open_price" style="color:var(--muted);">—</span>
+                              </td>
+                              <td class="detail-td mono" style="text-align:right;">
+                                <span x-show="ev.pl_chf!==null&&ev.pl_chf!==undefined"
+                                  :class="ev.pl_chf>=0?'profit':'loss'"
+                                  x-text="formatPL(ev.pl_chf)+' CHF'"></span>
+                                <span x-show="ev.pl_chf===null||ev.pl_chf===undefined" style="color:var(--muted);">—</span>
+                              </td>
+                            </tr>
+                          </template>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- Tag Form -->
+                  <div>
+                    <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">TAG & NOTIZ</div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                      <div>
+                        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Quelle</div>
+                        <select style="width:100%;" x-model="tagForm[trade.deal_id+'_q']">
+                          <option value="">— Keine Quelle —</option>
+                          <template x-for="q in quellen" :key="q"><option :value="q" x-text="q"></option></template>
+                        </select>
+                      </div>
+                      <div>
+                        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Notiz</div>
+                        <input type="text" style="width:100%;" placeholder="Optionale Notiz..."
+                          x-model="tagForm[trade.deal_id+'_n']">
+                      </div>
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <button class="btn-primary"
+                          @click="saveTag(trade.deal_id, tagForm[trade.deal_id+'_q'], tagForm[trade.deal_id+'_n'])">
+                          Speichern
+                        </button>
+                        <span x-show="saveStatus[trade.deal_id]" class="profit"
+                          style="font-size:12px;" x-text="saveStatus[trade.deal_id]"></span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </template>
+        <tbody x-show="filteredTrades.length===0">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Trades gefunden</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- end trades tab -->
+
+  <!-- ───── IMPORT TAB ───── -->
+  <div x-show="!loading && tab==='import'" style="max-width:600px;margin:0 auto;">
+    <div class="card" style="padding:40px;text-align:center;">
+      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:8px;">Import</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:28px;">JSON-Datei importieren: <span class="mono">{ "activities": [...], "transactions": [...] }</span></div>
+
+      <div style="border:2px dashed var(--border);border-radius:8px;padding:40px;margin-bottom:16px;transition:border-color .15s;cursor:pointer;"
+        @dragover.prevent="$el.style.borderColor='var(--accent)'"
+        @dragleave="$el.style.borderColor='var(--border)'"
+        @drop.prevent="handleFileDrop($event)">
+        <input type="file" id="importFileInput" accept=".json" style="display:none;" @change="handleFileSelect($event)">
+        <label for="importFileInput" style="cursor:pointer;display:block;">
+          <div style="font-size:32px;margin-bottom:12px;">📁</div>
+          <div style="font-size:14px;color:#fff;margin-bottom:4px;">Datei hierher ziehen oder klicken</div>
+          <div style="font-size:12px;color:var(--muted);">.json mit activities/transactions</div>
+        </label>
+      </div>
+
+      <div x-show="importFile" style="margin-bottom:16px;font-size:13px;">
+        <span style="color:var(--muted);">Datei: </span>
+        <span class="mono" style="color:#fff;" x-text="importFile"></span>
+      </div>
+
+      <button x-show="importFile" class="btn-primary" @click="uploadImport()">Importieren</button>
+
+      <div x-show="importStatus" style="margin-top:16px;padding:12px 16px;border-radius:6px;font-size:13px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:#4ade80;" x-text="importStatus"></div>
+      <div x-show="importError"  style="margin-top:16px;padding:12px 16px;border-radius:6px;font-size:13px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#f87171;" x-text="importError"></div>
+    </div>
+  </div>
+
+  <!-- ───── SETTINGS TAB ───── -->
+  <div x-show="!loading && tab==='settings'" style="max-width:480px;margin:0 auto;">
+    <div class="card" style="padding:32px;">
+      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:24px;">Einstellungen</div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">CAPITAL.COM</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">API Key</div>
+          <input type="password" style="width:100%;" x-model="settings.capital_api_key"
+            :placeholder="settingsMasked.capital_api_key ? 'gesetzt – unverändert lassen zum Beibehalten' : ''">
         </div>
-    </section>
-
-    <!-- ===================== IMPORT TAB ===================== -->
-    <section x-show="tab==='import'" x-cloak>
-        <h2>Activities &amp; Transactions importieren</h2>
-        <p>JSON im Format <code>{ "activities": [...], "transactions": [...] }</code> einfügen:</p>
-        <textarea x-model="importText" rows="14" class="import-textarea" placeholder='{"activities": [], "transactions": []}'></textarea>
-        <div class="toolbar">
-            <button @click="runImport()">Importieren</button>
-            <span class="status" x-show="importStatus" x-text="importStatus"></span>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">E-Mail</div>
+          <input type="email" style="width:100%;" x-model="settings.capital_email">
         </div>
-    </section>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Passwort</div>
+          <input type="password" style="width:100%;" x-model="settings.capital_password"
+            :placeholder="settingsMasked.capital_password ? 'gesetzt – unverändert lassen zum Beibehalten' : ''">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Base-URL</div>
+          <select style="width:100%;" x-model="capitalUrlMode" @change="onCapitalUrlModeChange()">
+            <option value="live">Live (api-capital.backend-capital.com)</option>
+            <option value="demo">Demo (demo-api-capital.backend-capital.com)</option>
+            <option value="custom">Eigene URL</option>
+          </select>
+        </div>
+        <div x-show="capitalUrlMode==='custom'">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Eigene Base-URL</div>
+          <input type="text" style="width:100%;" x-model="settings.capital_url" placeholder="https://...">
+        </div>
+      </div>
 
-    <!-- ===================== SETTINGS TAB ===================== -->
-    <section x-show="tab==='settings'" x-cloak>
-        <h2>Einstellungen</h2>
-        <form @submit.prevent="saveSettings()" class="settings-form">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">POLLING</div>
+      <div style="margin-bottom:28px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Poll-Intervall (Sekunden)</div>
+        <input type="number" min="30" style="width:100%;" x-model.number="settings.poll_interval_seconds">
+      </div>
 
-            <fieldset>
-                <legend>Capital.com</legend>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">TELEGRAM</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Bot-Token</div>
+          <input type="password" style="width:100%;" x-model="settings.telegram_bot_token"
+            :placeholder="settingsMasked.telegram_bot_token ? 'gesetzt – unverändert lassen zum Beibehalten' : ''">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Chat-ID</div>
+          <input type="text" style="width:100%;" x-model="settings.telegram_chat_id">
+        </div>
+      </div>
 
-                <label>
-                    API Key
-                    <input type="password" x-model="settings.capital_api_key"
-                           :placeholder="settingsMasked.capital_api_key ? 'gesetzt (unverändert lassen zum Beibehalten)' : ''">
-                </label>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn-primary" @click="saveSettings()">Speichern</button>
+        <span x-show="settingsStatus" class="profit" style="font-size:12px;" x-text="settingsStatus"></span>
+      </div>
+    </div>
+  </div>
 
-                <label>
-                    E-Mail
-                    <input type="email" x-model="settings.capital_email">
-                </label>
+</main>
 
-                <label>
-                    Passwort
-                    <input type="password" x-model="settings.capital_password"
-                           :placeholder="settingsMasked.capital_password ? 'gesetzt (unverändert lassen zum Beibehalten)' : ''">
-                </label>
+<script>
+// ── API Basis-URL (same-origin, nginx proxied /trading/) ──────
+const API = '/trading';
+const MASK = '●●●●●●';
+const CAPITAL_URLS = {
+  live: 'https://api-capital.backend-capital.com',
+  demo: 'https://demo-api-capital.backend-capital.com',
+};
 
-                <label>
-                    Base-URL
-                    <select x-model="capitalUrlMode" @change="onCapitalUrlModeChange()">
-                        <option value="live">Live (api-capital.backend-capital.com)</option>
-                        <option value="demo">Demo (demo-api-capital.backend-capital.com)</option>
-                        <option value="custom">Eigene URL</option>
-                    </select>
-                </label>
-                <label x-show="capitalUrlMode === 'custom'">
-                    Eigene Base-URL
-                    <input type="text" x-model="settings.capital_url" placeholder="https://...">
-                </label>
-            </fieldset>
+function journal() {
+  return {
+    tab: 'trades',
+    trades: [],
+    loading: true,
+    filter: { instrument:'', direction:'', quelle:'', result:'', dateFrom:'', dateTo:'' },
+    expandedId: null,
+    detail: {},
+    tagForm: {},
+    saveStatus: {},
+    quellen: [],
+    importFile: null,
+    importFileObj: null,
+    importStatus: '',
+    importError: '',
+    chartInstance: null,
 
-            <fieldset>
-                <legend>Polling</legend>
-                <label>
-                    Poll-Intervall (Sekunden)
-                    <input type="number" min="30" x-model.number="settings.poll_interval_seconds">
-                </label>
-            </fieldset>
+    settings: {
+      quellen: '',
+      capital_api_key: '',
+      capital_email: '',
+      capital_password: '',
+      capital_url: '',
+      poll_interval_seconds: 60,
+      telegram_bot_token: '',
+      telegram_chat_id: '',
+    },
+    settingsMasked: {
+      capital_api_key: false,
+      capital_password: false,
+      telegram_bot_token: false,
+    },
+    capitalUrlMode: 'live',
+    settingsStatus: '',
 
-            <fieldset>
-                <legend>Telegram</legend>
-                <label>
-                    Bot-Token
-                    <input type="password" x-model="settings.telegram_bot_token"
-                           :placeholder="settingsMasked.telegram_bot_token ? 'gesetzt (unverändert lassen zum Beibehalten)' : ''">
-                </label>
-                <label>
-                    Chat-ID
-                    <input type="text" x-model="settings.telegram_chat_id">
-                </label>
-            </fieldset>
+    async init() {
+      this.$watch('loading', (val) => {
+        if (!val) setTimeout(() => this.renderChart(), 400);
+      });
+      await this.loadData();
+      this.$nextTick(() => this.renderChart());
+    },
 
-            <div class="toolbar">
-                <button type="submit">Speichern</button>
-                <span class="status" x-show="settingsStatus" x-text="settingsStatus"></span>
-            </div>
-        </form>
-    </section>
+    async loadData() {
+      try {
+        const [tRes, cRes] = await Promise.all([
+          fetch(API + '/trades'),
+          fetch(API + '/config')
+        ]);
+        this.trades = await tRes.json();
+        const cfg   = await cRes.json();
+        if (cfg && cfg.quellen) {
+          this.quellen = cfg.quellen.split(',').map(q => q.trim()).filter(Boolean);
+        }
+        this.trades.forEach(t => {
+          this.tagForm[t.deal_id + '_q'] = t.quelle  || '';
+          this.tagForm[t.deal_id + '_n'] = t.notiz   || '';
+        });
+      } catch(e) {
+        console.error('Ladefehler:', e);
+      }
+      this.loading = false;
+    },
 
-</div>
-<script src="app.js"></script>
+    get filteredTrades() {
+      return this.trades.filter(t => {
+        const isOpen   = t.pl_chf === null || t.pl_chf === undefined;
+        const isProfit = !isOpen && t.pl_chf > 0;
+        const isLoss   = !isOpen && t.pl_chf < 0;
+        if (this.filter.instrument && (t.instrument||'Gold') !== this.filter.instrument) return false;
+        if (this.filter.direction  && t.open_direction !== this.filter.direction)          return false;
+        if (this.filter.quelle === '__none__' && t.quelle)                                 return false;
+        if (this.filter.quelle && this.filter.quelle !== '__none__' && t.quelle !== this.filter.quelle) return false;
+        if (this.filter.result === 'win'  && !isProfit) return false;
+        if (this.filter.result === 'loss' && !isLoss)   return false;
+        if (this.filter.result === 'open' && !isOpen)   return false;
+        if (this.filter.dateFrom && t.open_time < this.filter.dateFrom)                    return false;
+        if (this.filter.dateTo   && t.open_time > this.filter.dateTo + 'T23:59:59')       return false;
+        return true;
+      });
+    },
+
+    get kpis() {
+      const closed = this.filteredTrades.filter(t => t.pl_chf !== null && t.pl_chf !== undefined);
+      const open   = this.filteredTrades.filter(t => t.pl_chf === null || t.pl_chf === undefined);
+      const wins   = closed.filter(t => t.pl_chf > 0);
+      const losses = closed.filter(t => t.pl_chf < 0);
+      const totalPL = closed.reduce((s, t) => s + (t.pl_chf || 0), 0);
+      const avgWin  = wins.length   ? wins.reduce((s,t)=>s+t.pl_chf,0)   / wins.length   : 0;
+      const avgLoss = losses.length ? losses.reduce((s,t)=>s+t.pl_chf,0) / losses.length : 0;
+      return {
+        totalPL:  Math.round(totalPL * 100) / 100,
+        closed:   closed.length,
+        wins:     wins.length,
+        losses:   losses.length,
+        open:     open.length,
+        winRate:  closed.length ? Math.round(wins.length / closed.length * 100) : 0,
+        avgWin:   Math.round(avgWin  * 100) / 100,
+        avgLoss:  Math.round(avgLoss * 100) / 100
+      };
+    },
+
+    renderChart() {
+      const canvas = document.getElementById('equityChart');
+      if (!canvas || canvas.offsetParent === null || canvas.offsetWidth === 0) {
+        setTimeout(() => this.renderChart(), 400);
+        return;
+      }
+      if (this.chartInstance) this.chartInstance.destroy();
+
+      const closed = [...this.trades]
+        .filter(t => t.pl_chf !== null && t.close_time)
+        .sort((a, b) => a.close_time > b.close_time ? 1 : -1);
+
+      let cum = 0;
+      const labels = ['Start'];
+      const data = [0];
+      closed.forEach(t => {
+        cum += t.pl_chf || 0;
+        labels.push(this.formatDate(t.close_time));
+        data.push(Math.round(cum * 100) / 100);
+      });
+
+      const positive = (data[data.length - 1] || 0) >= 0;
+      const lineCol = positive ? '#22c55e' : '#ef4444';
+      const fillCol = positive ? 'rgba(34,197,94,0.07)' : 'rgba(239,68,68,0.07)';
+
+      this.chartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            borderColor: lineCol,
+            backgroundColor: fillCol,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: lineCol,
+            fill: true,
+            tension: 0.35
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(26,42,69,0.7)' } },
+            y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => (v>=0?'+':'')+v+' CHF' }, grid: { color: 'rgba(26,42,69,0.7)' } }
+          }
+        }
+      });
+    },
+
+    async toggleDetail(dealId) {
+      if (this.expandedId === dealId) { this.expandedId = null; return; }
+      this.expandedId = dealId;
+      if (!this.detail[dealId]) {
+        try {
+          const res = await fetch(API + '/detail?dealId=' + encodeURIComponent(dealId));
+          this.detail[dealId] = await res.json();
+        } catch(e) { this.detail[dealId] = []; }
+      }
+    },
+
+    async saveTag(dealId, quelle, notiz) {
+      try {
+        await fetch(API + '/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dealId, quelle, notiz })
+        });
+        const trade = this.trades.find(t => t.deal_id === dealId);
+        if (trade) { trade.quelle = quelle; trade.notiz = notiz; }
+        this.saveStatus[dealId] = '✅ Gespeichert';
+        setTimeout(() => { delete this.saveStatus[dealId]; }, 2500);
+      } catch(e) { this.saveStatus[dealId] = '❌ Fehler'; }
+    },
+
+    resetFilters() {
+      this.filter = { instrument:'', direction:'', quelle:'', result:'', dateFrom:'', dateTo:'' };
+    },
+
+    handleFileSelect(e) {
+      const f = e.target.files[0];
+      if (f) { this.importFile = f.name; this.importFileObj = f; }
+    },
+
+    handleFileDrop(e) {
+      const f = e.dataTransfer.files[0];
+      if (f && f.name.endsWith('.json')) {
+        this.importFile = f.name;
+        this.importFileObj = f;
+      }
+    },
+
+    async uploadImport() {
+      if (!this.importFileObj) return;
+      this.importStatus = '';
+      this.importError  = '';
+      try {
+        const text = await this.importFileObj.text();
+        const payload = JSON.parse(text);
+        const res  = await fetch(API + '/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        this.importStatus = '✅ ' + (result.message || 'Import abgeschlossen');
+        await this.loadData();
+        this.$nextTick(() => this.renderChart());
+      } catch(e) {
+        this.importError = '❌ Fehler: ' + e.message;
+      }
+    },
+
+    async loadSettings() {
+      const res = await fetch(API + '/settings');
+      const data = await res.json();
+
+      for (const key of Object.keys(this.settings)) {
+        if (data[key] === undefined) continue;
+
+        if (this.settingsMasked[key] !== undefined) {
+          this.settingsMasked[key] = data[key] === MASK;
+          this.settings[key] = this.settingsMasked[key] ? '' : data[key];
+        } else {
+          this.settings[key] = data[key];
+        }
+      }
+
+      this.capitalUrlMode = Object.entries(CAPITAL_URLS).find(
+        ([, url]) => url === this.settings.capital_url
+      )?.[0] || 'custom';
+    },
+
+    onCapitalUrlModeChange() {
+      if (this.capitalUrlMode !== 'custom') {
+        this.settings.capital_url = CAPITAL_URLS[this.capitalUrlMode];
+      }
+    },
+
+    async saveSettings() {
+      const payload = {};
+
+      for (const [key, value] of Object.entries(this.settings)) {
+        if (key in this.settingsMasked && value === '') {
+          continue; // untouched secret field, keep server value
+        }
+        payload[key] = value;
+      }
+
+      const res = await fetch(API + '/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      this.settingsStatus = data.message || 'Gespeichert';
+      this.loadSettings();
+    },
+
+    formatDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso.includes('Z') ? iso : iso + 'Z');
+      return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit', year:'2-digit' });
+    },
+
+    formatDateTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso.includes('Z') ? iso : iso + 'Z');
+      return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit' }) + ' ' +
+             d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit' });
+    },
+
+    formatPrice(n) {
+      if (n === null || n === undefined) return '—';
+      return Number(n).toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    formatPL(n) {
+      if (n === null || n === undefined || n === 0 && this.kpis) return '—';
+      return (n >= 0 ? '+' : '') + Number(n).toFixed(2);
+    },
+
+    formatDuration(open, close) {
+      if (!close) return 'offen';
+      const ms = new Date(close + 'Z') - new Date(open + 'Z');
+      const m  = Math.floor(ms / 60000);
+      if (m < 60) return m + 'm';
+      return Math.floor(m/60) + 'h ' + (m%60) + 'm';
+    }
+  };
+}
+</script>
 </body>
 </html>
