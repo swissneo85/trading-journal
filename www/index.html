@@ -37,6 +37,9 @@
     .badge-tp   { background: rgba(34,197,94,.12);  color: #4ade80; border: 1px solid rgba(34,197,94,.2); }
     .badge-user { background: rgba(59,130,246,.12); color: #60a5fa; border: 1px solid rgba(59,130,246,.2); }
     .badge-src  { background: rgba(59,130,246,.10); color: #93c5fd; border: 1px solid rgba(59,130,246,.2); }
+    .badge-blue { background: rgba(59,130,246,.12); color: #60a5fa; border: 1px solid rgba(59,130,246,.2); }
+    .badge-purple{background: rgba(168,85,247,.12); color: #c084fc; border: 1px solid rgba(168,85,247,.2); }
+    .badge-red  { background: rgba(239,68,68,.12);  color: #f87171; border: 1px solid rgba(239,68,68,.2); }
     tr.trade-row:hover td { background: rgba(59,130,246,.04); cursor: pointer; }
     tr.detail-row td { background: #090f1d; }
     .tab-btn { padding: 4px 0; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .15s; color: var(--muted); background: none; border-top: none; border-left: none; border-right: none; cursor: pointer; }
@@ -66,7 +69,8 @@
     <nav style="display:flex;gap:24px;">
       <button class="tab-btn" :class="tab==='trades'?'active':''" @click="tab='trades'">Trades</button>
       <button class="tab-btn" :class="tab==='import'?'active':''" @click="tab='import'">Import</button>
-      <button class="tab-btn" :class="tab==='settings'?'active':''" @click="tab='settings'; loadSettings()">Settings</button>
+      <button class="tab-btn" :class="tab==='log'?'active':''" @click="tab='log'; loadLog()">Log</button>
+      <button class="tab-btn" :class="tab==='settings'?'active':''" @click="tab='settings'; loadSettings(); loadSources()">Settings</button>
     </nav>
   </div>
 </header>
@@ -283,6 +287,8 @@
                         <select style="width:100%;" x-model="tagForm[trade.deal_id+'_q']">
                           <option value="">— Keine Quelle —</option>
                           <template x-for="q in quellen" :key="q"><option :value="q" x-text="q"></option></template>
+                          <option x-show="trade.quelle && !quellen.includes(trade.quelle)" disabled
+                            :value="trade.quelle" x-text="trade.quelle + ' (archiviert)'"></option>
                         </select>
                       </div>
                       <div>
@@ -344,6 +350,23 @@
     </div>
   </div>
 
+  <!-- ───── LOG TAB ───── -->
+  <div x-show="!loading && tab==='log'" style="max-width:800px;margin:0 auto;">
+    <div class="card" style="padding:24px;">
+      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:20px;">Activity Log</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <template x-for="entry in logEntries" :key="entry.id">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid rgba(26,42,69,.4);">
+            <span class="mono" style="font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px;" x-text="formatDateTime(entry.created_at)"></span>
+            <span class="badge" :class="logBadgeClass(entry.type)" x-text="entry.type" style="white-space:nowrap;"></span>
+            <span style="font-size:13px;" x-text="entry.message"></span>
+          </div>
+        </template>
+        <div x-show="logEntries.length===0" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Log-Einträge</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ───── SETTINGS TAB ───── -->
   <div x-show="!loading && tab==='settings'" style="max-width:480px;margin:0 auto;">
     <div class="card" style="padding:32px;">
@@ -398,9 +421,26 @@
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
         <button class="btn-primary" @click="saveSettings()">Speichern</button>
         <span x-show="settingsStatus" class="profit" style="font-size:12px;" x-text="settingsStatus"></span>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">QUELLEN VERWALTEN</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        <template x-for="s in allSources" :key="s.id">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="text" style="flex:1;" :style="s.archived ? 'text-decoration:line-through;color:var(--muted);' : ''"
+              x-model="s.name" @change="renameSource(s)">
+            <button class="btn-ghost" @click="toggleArchiveSource(s)" x-text="s.archived ? 'Reaktivieren' : 'Archivieren'"></button>
+            <button class="btn-ghost" @click="deleteSource(s)">Löschen</button>
+          </div>
+        </template>
+        <div x-show="allSources.length===0" style="font-size:12px;color:var(--muted);">Keine Quellen angelegt</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" style="flex:1;" placeholder="Neue Quelle..." x-model="newSourceName" @keydown.enter="addSource()">
+        <button class="btn-primary" @click="addSource()">Hinzufügen</button>
       </div>
     </div>
   </div>
@@ -427,6 +467,9 @@ function journal() {
     tagForm: {},
     saveStatus: {},
     quellen: [],
+    allSources: [],
+    newSourceName: '',
+    logEntries: [],
     importFile: null,
     importFileObj: null,
     importStatus: '',
@@ -434,7 +477,6 @@ function journal() {
     chartInstance: null,
 
     settings: {
-      quellen: '',
       capital_api_key: '',
       capital_email: '',
       capital_password: '',
@@ -457,19 +499,16 @@ function journal() {
       });
       await this.loadData();
       this.$nextTick(() => this.renderChart());
+      setInterval(() => { if (this.tab === 'log') this.loadLog(); }, 30000);
     },
 
     async loadData() {
       try {
-        const [tRes, cRes] = await Promise.all([
+        const [tRes] = await Promise.all([
           fetch(API + '/trades'),
-          fetch(API + '/config')
+          this.loadSources()
         ]);
         this.trades = await tRes.json();
-        const cfg   = await cRes.json();
-        if (cfg && cfg.quellen) {
-          this.quellen = cfg.quellen.split(',').map(q => q.trim()).filter(Boolean);
-        }
         this.trades.forEach(t => {
           this.tagForm[t.deal_id + '_q'] = t.quelle  || '';
           this.tagForm[t.deal_id + '_n'] = t.notiz   || '';
@@ -478,6 +517,68 @@ function journal() {
         console.error('Ladefehler:', e);
       }
       this.loading = false;
+    },
+
+    async loadSources() {
+      const [activeRes, allRes] = await Promise.all([
+        fetch(API + '/sources'),
+        fetch(API + '/sources?all=1')
+      ]);
+      this.quellen = (await activeRes.json()).map(s => s.name);
+      this.allSources = await allRes.json();
+    },
+
+    async addSource() {
+      const name = this.newSourceName.trim();
+      if (!name) return;
+      const res = await fetch(API + '/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (res.ok) {
+        this.newSourceName = '';
+        await this.loadSources();
+      }
+    },
+
+    async renameSource(source) {
+      await fetch(API + '/sources/' + source.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: source.name })
+      });
+      await this.loadSources();
+    },
+
+    async toggleArchiveSource(source) {
+      await fetch(API + '/sources/' + source.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: !source.archived })
+      });
+      await this.loadSources();
+    },
+
+    async deleteSource(source) {
+      if (!confirm('Quelle "' + source.name + '" wirklich löschen?')) return;
+      await fetch(API + '/sources/' + source.id, { method: 'DELETE' });
+      await this.loadSources();
+    },
+
+    async loadLog() {
+      try {
+        const res = await fetch(API + '/log?limit=100');
+        this.logEntries = await res.json();
+      } catch(e) {
+        console.error('Log-Ladefehler:', e);
+      }
+    },
+
+    logBadgeClass(type) {
+      if (type === 'error') return 'badge-red';
+      if (type === 'import') return 'badge-purple';
+      return 'badge-blue';
     },
 
     get filteredTrades() {
