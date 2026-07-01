@@ -368,7 +368,13 @@ function journal() {
 
     async init() {
       this.$watch('loading', (val) => {
-        if (!val) setTimeout(() => this.renderChart(), 200);
+        if (!val) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              this.renderChart();
+            });
+          });
+        }
       });
       await this.loadData();
       this.$nextTick(() => this.renderChart());
@@ -435,9 +441,12 @@ function journal() {
 
     renderChart() {
       const canvas = document.getElementById('equityChart');
-      if (!canvas) { setTimeout(() => this.renderChart(), 500); return; }
-      const ctx = canvas.getContext('2d');
+      if (!canvas || canvas.offsetWidth === 0) {
+        setTimeout(() => this.renderChart(), 300);
+        return;
+      }
       if (this.chartInstance) this.chartInstance.destroy();
+      const ctx = canvas.getContext('2d');
 
       const closed = [...this.trades]
         .filter(t => t.pl_chf !== null && t.close_time)
