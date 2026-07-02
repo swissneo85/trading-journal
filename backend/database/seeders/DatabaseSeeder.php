@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use App\Models\ConfigEntry;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class DatabaseSeeder extends Seeder
 {
@@ -12,6 +12,10 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Seed the application's database.
+     *
+     * install.sh runs this on every deployment, so defaults must only ever
+     * fill in missing keys — an existing value (e.g. user-entered API
+     * credentials) must never be touched.
      */
     public function run(): void
     {
@@ -27,7 +31,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($defaults as $key => $value) {
-            ConfigEntry::updateOrCreate(['key' => $key], ['value' => $value]);
+            DB::table('config')->insertOrIgnore(['key' => $key, 'value' => $value]);
         }
     }
 }
