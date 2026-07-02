@@ -130,9 +130,44 @@ systemctl restart "php${PHP_VERSION}-fpm"
 systemctl restart nginx
 systemctl enable nginx "php${PHP_VERSION}-fpm"
 
-# ---- Cron für Laravel Scheduler ----
-CRON_LINE="* * * * * php $APP_DIR/backend/artisan schedule:run >> /dev/null 2>&1"
-( crontab -l 2>/dev/null | grep -v "artisan schedule:run" ; echo "$CRON_LINE" ) | crontab -
+# ---- systemd Timer fuer Laravel Scheduler (robuster als crontab) ----
+# Ersetzt den frueheren Crontab-Eintrag: eine einzelne, leicht durch
+# "crontab -r" o.ae. ueberschreibbare Datei ist kein verlaesslicher Ort fuer
+# einen Job, der bei jedem install.sh-Lauf ueberleben muss.
+PHP_BIN=$(command -v php)
+
+cat > /etc/systemd/system/trading-journal-scheduler.service << EOF
+[Unit]
+Description=Trading Journal Laravel Scheduler
+
+[Service]
+Type=oneshot
+WorkingDirectory=$APP_DIR/backend
+ExecStart=$PHP_BIN $APP_DIR/backend/artisan schedule:run
+EOF
+
+cat > /etc/systemd/system/trading-journal-scheduler.timer << 'EOF'
+[Unit]
+Description=Trading Journal Scheduler - jede Minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now trading-journal-scheduler.timer
+
+if systemctl is-active --quiet trading-journal-scheduler.timer; then
+    echo "✅ Scheduler-Timer aktiv"
+else
+    echo "⚠️  WARNUNG: Scheduler-Timer läuft nicht! Manuell prüfen mit:"
+    echo "   systemctl status trading-journal-scheduler.timer"
+fi
 
 IP=$(hostname -I | awk '{print $1}')
 echo ""
