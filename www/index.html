@@ -442,6 +442,19 @@
         <input type="text" style="flex:1;" placeholder="Neue Quelle..." x-model="newSourceName" @keydown.enter="addSource()">
         <button class="btn-primary" @click="addSource()">Hinzufügen</button>
       </div>
+
+      <div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;color:#fff;margin-bottom:12px;font-weight:500;">Manuell testen</div>
+        <div style="display:flex;gap:12px;">
+          <button class="btn-ghost" @click="triggerAction('poll')" :disabled="triggering">
+            🔄 Positionen abrufen
+          </button>
+          <button class="btn-ghost" @click="triggerAction('history')" :disabled="triggering">
+            📊 History/P&amp;L abrufen
+          </button>
+        </div>
+        <div x-show="triggerStatus" style="margin-top:12px;padding:10px 14px;border-radius:6px;font-size:12px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:#93c5fd;" x-text="triggerStatus"></div>
+      </div>
     </div>
   </div>
 
@@ -475,6 +488,8 @@ function journal() {
     importStatus: '',
     importError: '',
     chartInstance: null,
+    triggering: false,
+    triggerStatus: '',
 
     settings: {
       capital_api_key: '',
@@ -579,6 +594,22 @@ function journal() {
       if (type === 'error') return 'badge-red';
       if (type === 'import') return 'badge-purple';
       return 'badge-blue';
+    },
+
+    async triggerAction(type) {
+      this.triggering = true;
+      this.triggerStatus = '';
+      try {
+        const res = await fetch(API + '/trigger/' + type, { method: 'POST' });
+        const result = await res.json();
+        this.triggerStatus = result.message || '✅ Ausgelöst';
+        await this.loadData();
+        setTimeout(() => this.renderChart(), 400);
+      } catch(e) {
+        this.triggerStatus = '❌ Fehler: ' + e.message;
+      } finally {
+        this.triggering = false;
+      }
     },
 
     get filteredTrades() {
