@@ -7,6 +7,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TradeController;
+use App\Http\Controllers\TriggerController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('trading')->group(function () {
@@ -23,4 +24,6 @@ Route::prefix('trading')->group(function () {
     Route::post('/sources', [SourceController::class, 'store']);
     Route::put('/sources/{source}', [SourceController::class, 'update']);
     Route::delete('/sources/{source}', [SourceController::class, 'destroy']);
+    Route::post('/trigger/poll', [TriggerController::class, 'poll']);
+    Route::post('/trigger/history', [TriggerController::class, 'history']);
 });
