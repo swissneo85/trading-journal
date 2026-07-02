@@ -18,17 +18,23 @@ WEB_ROOT="/var/www/trading-journal"
 echo "=== Trading Journal — Setup startet ==="
 
 # ---- Pakete installieren ----
+# Bewusst OHNE das generische "php" Metapaket - das zieht libapache2-mod-php
+# und damit Apache2 mit rein, was mit Nginx auf Port 80 kollidiert.
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y git curl unzip nginx \
-    php php-fpm php-sqlite3 php-mbstring php-xml php-curl php-bcmath php-zip
+    php-fpm php-cli php-sqlite3 php-mbstring php-xml php-curl php-bcmath php-zip
 
 # ---- Composer installieren (falls fehlend) ----
+# /usr/bin statt /usr/local/bin, da letzteres bei non-interaktiven
+# "pct exec" Aufrufen nicht im PATH ist.
 if ! command -v composer >/dev/null 2>&1; then
     echo "Installiere Composer..."
     curl -sS https://getcomposer.org/installer | php
-    mv composer.phar /usr/local/bin/composer
+    mv composer.phar /usr/bin/composer
+    chmod +x /usr/bin/composer
 fi
+export COMPOSER_ALLOW_SUPERUSER=1
 
 # ---- Repo klonen oder aktualisieren ----
 if [ -d "$APP_DIR/.git" ]; then

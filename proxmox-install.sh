@@ -54,6 +54,10 @@ pct start "$CTID"
 echo "Warte auf Netzwerk..."
 sleep 8
 
+# ---- curl sicherstellen (fehlt im minimalen Debian-Template) ----
+echo "Installiere curl im Container..."
+pct exec "$CTID" -- bash -c "apt-get update -y -qq && apt-get install -y -qq curl"
+
 # ---- Installer im Container ausführen ----
 echo "Lade install.sh in den Container..."
 pct exec "$CTID" -- bash -c "curl -fsSL $RAW_INSTALL_SH -o /root/install.sh && chmod +x /root/install.sh"
