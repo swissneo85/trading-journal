@@ -828,19 +828,30 @@ function journal() {
     <button @click="expandedId = null"
             style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">✕</button>
 
-    <template x-if="expandedTrade">
+    <!-- Intentionally no x-if/x-show here: the <select> below and its
+         x-for options must mount exactly once, at initial page load,
+         alongside the rest of this always-present-in-the-DOM overlay.
+         Alpine processes a "for" directive on a descendant only after
+         it has already applied "model" on this subtree's <select> (see
+         Alpine's fixed directiveOrder: for < model < show < if) — so if
+         this block were freshly (re)mounted via x-if every time the
+         modal opens, x-model's very first sync would run before the
+         x-for options exist yet, silently falling back to the empty
+         "— Keine Quelle —" option. Mounting once at load sidesteps the
+         race entirely; every later modalQuelle change re-syncs fine
+         against an already-populated <select>. -->
       <div>
         <!-- Header -->
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-right:32px;">
-          <span style="font-size:16px;font-weight:600;color:#fff;" x-text="expandedTrade.instrument || 'Gold'"></span>
-          <span class="badge" :class="expandedTrade.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
-            x-text="expandedTrade.open_direction==='BUY' ? 'Long' : 'Short'"></span>
-          <span class="mono" style="font-size:13px;color:var(--muted);">Entry <span style="color:var(--text);" x-text="formatPrice(expandedTrade.entry_price)"></span></span>
+          <span style="font-size:16px;font-weight:600;color:#fff;" x-text="expandedTrade?.instrument || 'Gold'"></span>
+          <span class="badge" :class="expandedTrade?.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
+            x-text="expandedTrade?.open_direction==='BUY' ? 'Long' : 'Short'"></span>
+          <span class="mono" style="font-size:13px;color:var(--muted);">Entry <span style="color:var(--text);" x-text="formatPrice(expandedTrade?.entry_price)"></span></span>
           <span class="mono" style="font-size:15px;font-weight:500;margin-left:auto;">
-            <span x-show="expandedTrade.pl_chf===null||expandedTrade.pl_chf===undefined" class="openpos">offen</span>
-            <span x-show="expandedTrade.pl_chf!==null&&expandedTrade.pl_chf!==undefined"
-              :class="expandedTrade.pl_chf>=0 ? 'profit' : 'loss'"
-              x-text="formatPL(expandedTrade.pl_chf)+' CHF'"></span>
+            <span x-show="expandedTrade?.pl_chf===null||expandedTrade?.pl_chf===undefined" class="openpos">offen</span>
+            <span x-show="expandedTrade?.pl_chf!==null&&expandedTrade?.pl_chf!==undefined"
+              :class="expandedTrade?.pl_chf>=0 ? 'profit' : 'loss'"
+              x-text="formatPL(expandedTrade?.pl_chf)+' CHF'"></span>
           </span>
         </div>
 
@@ -925,7 +936,6 @@ function journal() {
 
         </div>
       </div>
-    </template>
   </div>
 </div>
 </body>
