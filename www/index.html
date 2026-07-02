@@ -252,29 +252,54 @@
   </div><!-- end trades tab -->
 
   <!-- ───── IMPORT TAB ───── -->
-  <div x-show="!loading && tab==='import'" style="max-width:600px;margin:0 auto;">
-    <div class="card" style="padding:40px;text-align:center;">
-      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:8px;">Import</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:28px;">JSON-Datei importieren: <span class="mono">{ "activities": [...], "transactions": [...] }</span></div>
-
-      <div style="border:2px dashed var(--border);border-radius:8px;padding:40px;margin-bottom:16px;transition:border-color .15s;cursor:pointer;"
-        @dragover.prevent="$el.style.borderColor='var(--accent)'"
-        @dragleave="$el.style.borderColor='var(--border)'"
-        @drop.prevent="handleFileDrop($event)">
-        <input type="file" id="importFileInput" accept=".json" style="display:none;" @change="handleFileSelect($event)">
-        <label for="importFileInput" style="cursor:pointer;display:block;">
-          <div style="font-size:32px;margin-bottom:12px;">📁</div>
-          <div style="font-size:14px;color:#fff;margin-bottom:4px;">Datei hierher ziehen oder klicken</div>
-          <div style="font-size:12px;color:var(--muted);">.json mit activities/transactions</div>
-        </label>
+  <div x-show="!loading && tab==='import'" style="max-width:640px;margin:0 auto;">
+    <div class="card" style="padding:32px;">
+      <div style="font-size:17px;font-weight:600;color:#fff;margin-bottom:4px;">CSV Import</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:24px;">
+        CSV-Parsing läuft im Browser. Trades-CSV liefert Positionen + P/L,
+        Funds-CSV ist optional (nur für Ein-/Auszahlungen).
       </div>
 
-      <div x-show="importFile" style="margin-bottom:16px;font-size:13px;">
-        <span style="color:var(--muted);">Datei: </span>
-        <span class="mono" style="color:#fff;" x-text="importFile"></span>
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px;color:#fff;margin-bottom:8px;font-weight:500;">1) Trades CSV <span style="color:var(--loss);">*</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Berichte → "leveraged_trades_history_..." — Pflicht</div>
+        <div style="border:2px dashed var(--border);border-radius:8px;padding:20px;cursor:pointer;"
+          :style="importTradesFile ? 'border-color:var(--profit);' : ''"
+          @dragover.prevent="$el.style.borderColor='var(--accent)'"
+          @dragleave="$el.style.borderColor=importTradesFile?'var(--profit)':'var(--border)'"
+          @drop.prevent="handleFileDrop($event, 'trades')">
+          <input type="file" id="tradesCsvFile" accept=".csv" style="display:none;" @change="handleFileSelect($event, 'trades')">
+          <label for="tradesCsvFile" style="cursor:pointer;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">📁</span>
+            <span style="font-size:13px;" x-text="importTradesFile || 'Datei wählen oder hierher ziehen'"
+              :style="importTradesFile ? 'color:#4ade80;' : 'color:var(--muted);'"></span>
+          </label>
+        </div>
       </div>
 
-      <button x-show="importFile" class="btn-primary" @click="uploadImport()">Importieren</button>
+      <div style="margin-bottom:24px;">
+        <div style="font-size:12px;color:#fff;margin-bottom:8px;font-weight:500;">2) Transaktionen CSV <span style="color:var(--muted);font-weight:400;">(optional)</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Berichte → "funds_history_..." — nur für Ein-/Auszahlungen</div>
+        <div style="border:2px dashed var(--border);border-radius:8px;padding:20px;cursor:pointer;"
+          :style="importFundsFile ? 'border-color:var(--profit);' : ''"
+          @dragover.prevent="$el.style.borderColor='var(--accent)'"
+          @dragleave="$el.style.borderColor=importFundsFile?'var(--profit)':'var(--border)'"
+          @drop.prevent="handleFileDrop($event, 'funds')">
+          <input type="file" id="fundsCsvFile" accept=".csv" style="display:none;" @change="handleFileSelect($event, 'funds')">
+          <label for="fundsCsvFile" style="cursor:pointer;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">📁</span>
+            <span style="font-size:13px;" x-text="importFundsFile || 'Datei wählen oder hierher ziehen (optional)'"
+              :style="importFundsFile ? 'color:#4ade80;' : 'color:var(--muted);'"></span>
+          </label>
+        </div>
+      </div>
+
+      <button class="btn-primary" style="width:100%;padding:10px;"
+        :disabled="!importTradesFile"
+        :style="!importTradesFile ? 'opacity:0.4;cursor:not-allowed;' : ''"
+        @click="uploadCSV()">
+        Importieren
+      </button>
 
       <div x-show="importStatus" style="margin-top:16px;padding:12px 16px;border-radius:6px;font-size:13px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:#4ade80;" x-text="importStatus"></div>
       <div x-show="importError"  style="margin-top:16px;padding:12px 16px;border-radius:6px;font-size:13px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#f87171;" x-text="importError"></div>
@@ -408,14 +433,17 @@ function journal() {
     filter: { instrument:'', direction:'', quelle:'', result:'', dateFrom:'', dateTo:'' },
     expandedId: null,
     detail: {},
-    tagForm: {},
+    modalQuelle: '',
+    modalNotiz: '',
     saveStatus: {},
     quellen: [],
     allSources: [],
     newSourceName: '',
     logEntries: [],
-    importFile: null,
-    importFileObj: null,
+    importTradesFile: null,
+    importTradesFileObj: null,
+    importFundsFile: null,
+    importFundsFileObj: null,
     importStatus: '',
     importError: '',
     chartInstance: null,
@@ -488,10 +516,6 @@ function journal() {
           this.loadSources()
         ]);
         this.trades = await tRes.json();
-        this.trades.forEach(t => {
-          this.tagForm[t.deal_id + '_q'] = t.quelle  || '';
-          this.tagForm[t.deal_id + '_n'] = t.notiz   || '';
-        });
       } catch(e) {
         console.error('Ladefehler:', e);
       }
@@ -669,6 +693,9 @@ function journal() {
     async toggleDetail(dealId) {
       if (this.expandedId === dealId) { this.expandedId = null; return; }
       this.expandedId = dealId;
+      const trade = this.trades.find(t => t.deal_id === dealId);
+      this.modalQuelle = trade?.quelle || '';
+      this.modalNotiz = trade?.notiz || '';
       if (!this.detail[dealId]) {
         try {
           const res = await fetch(API + '/detail?dealId=' + encodeURIComponent(dealId));
@@ -695,35 +722,137 @@ function journal() {
       this.filter = { instrument:'', direction:'', quelle:'', result:'', dateFrom:'', dateTo:'' };
     },
 
-    handleFileSelect(e) {
-      const f = e.target.files[0];
-      if (f) { this.importFile = f.name; this.importFileObj = f; }
-    },
-
-    handleFileDrop(e) {
-      const f = e.dataTransfer.files[0];
-      if (f && f.name.endsWith('.json')) {
-        this.importFile = f.name;
-        this.importFileObj = f;
+    parseCSVLine(line) {
+      const result = [];
+      let cur = '', inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') inQuotes = !inQuotes;
+        else if (c === ',' && !inQuotes) { result.push(cur); cur = ''; }
+        else cur += c;
       }
+      result.push(cur);
+      return result;
     },
 
-    async uploadImport() {
-      if (!this.importFileObj) return;
+    parseCSV(text) {
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 2) return [];
+      const headers = this.parseCSVLine(lines[0]);
+      return lines.slice(1).map(line => {
+        const values = this.parseCSVLine(line);
+        const obj = {};
+        headers.forEach((h, idx) => obj[h] = values[idx]);
+        return obj;
+      });
+    },
+
+    convertTimestamp(ts) {
+      if (!ts) return null;
+      const t = ts.trim();
+      let m = t.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\.(\d{3})\d*\s*\+00:00$/);
+      if (m) return `${m[1]}T${m[2]}.${m[3]}`;
+      m = t.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/);
+      if (m) return `${m[1]}T${m[2]}.000`;
+      return t.replace(' ', 'T');
+    },
+
+    handleFileSelect(e, kind) {
+      const f = e.target.files[0];
+      if (!f) return;
+      if (kind === 'trades') { this.importTradesFile = f.name; this.importTradesFileObj = f; }
+      else { this.importFundsFile = f.name; this.importFundsFileObj = f; }
+    },
+
+    handleFileDrop(e, kind) {
+      const f = e.dataTransfer.files[0];
+      if (!f || !f.name.endsWith('.csv')) return;
+      if (kind === 'trades') { this.importTradesFile = f.name; this.importTradesFileObj = f; }
+      else { this.importFundsFile = f.name; this.importFundsFileObj = f; }
+    },
+
+    async uploadCSV() {
       this.importStatus = '';
       this.importError  = '';
       try {
-        const text = await this.importFileObj.text();
-        const payload = JSON.parse(text);
-        const res  = await fetch(API + '/import', {
+        const activities   = [];
+        const transactions = [];
+        const openPriceMap = {};
+
+        if (this.importTradesFileObj) {
+          const text = await this.importTradesFileObj.text();
+          const rows = this.parseCSV(text);
+
+          rows.forEach(r => {
+            if (r['Trade Id'] && r['Status'] === 'OPENED') {
+              openPriceMap[r['Trade Id']] = parseFloat(r['Price']);
+            }
+          });
+
+          rows.forEach(r => {
+            const status = r['Status'];
+            if (status !== 'OPENED' && status !== 'CLOSED') return;
+
+            const dealId  = r['Trade Id'];
+            const dateUTC = this.convertTimestamp(r['Timestamp (UTC)']);
+            if (!dealId || !dateUTC) return;
+
+            const qty = parseFloat(r['Quantity']);
+            activities.push({
+              deal_id: dealId,
+              date_utc: dateUTC,
+              epic: r['Instrument Symbol'],
+              instrument: r['Instrument Name'],
+              direction: qty >= 0 ? 'BUY' : 'SELL',
+              size: Math.abs(qty),
+              level: parseFloat(r['Price']),
+              open_price: status === 'OPENED' ? null : (openPriceMap[dealId] ?? null),
+              source: r['Source']
+            });
+
+            if (status === 'CLOSED') {
+              const pl = parseFloat(r['Rpl Converted']);
+              if (r['Exec Id'] && !isNaN(pl)) {
+                transactions.push({
+                  reference: r['Exec Id'],
+                  deal_id: dealId,
+                  date_utc: dateUTC,
+                  instrument: r['Instrument Name'],
+                  transaction_type: 'TRADE',
+                  pl_chf: pl
+                });
+              }
+            }
+          });
+        }
+
+        if (this.importFundsFileObj) {
+          const text = await this.importFundsFileObj.text();
+          const rows = this.parseCSV(text);
+          rows.forEach(r => {
+            if (r['Type'] === 'TRADE') return;
+            if (!r['Id']) return;
+            const pl = parseFloat(r['Amount']);
+            transactions.push({
+              reference: r['Id'],
+              deal_id: null,
+              date_utc: this.convertTimestamp(r['Modified (UTC)']),
+              instrument: r['Instrument Name'],
+              transaction_type: r['Type'],
+              pl_chf: isNaN(pl) ? 0 : pl
+            });
+          });
+        }
+
+        const res = await fetch(API + '/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ activities, transactions })
         });
         const result = await res.json();
-        this.importStatus = '✅ ' + (result.message || 'Import abgeschlossen');
+        this.importStatus = result.message || 'Import abgeschlossen';
         await this.loadData();
-        this.$nextTick(() => this.renderChart());
+        setTimeout(() => this.renderChart(), 400);
       } catch(e) {
         this.importError = '❌ Fehler: ' + e.message;
       }
@@ -828,19 +957,30 @@ function journal() {
     <button @click="expandedId = null"
             style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">✕</button>
 
-    <template x-if="expandedTrade">
+    <!-- Intentionally no x-if/x-show here: the <select> below and its
+         x-for options must mount exactly once, at initial page load,
+         alongside the rest of this always-present-in-the-DOM overlay.
+         Alpine processes a "for" directive on a descendant only after
+         it has already applied "model" on this subtree's <select> (see
+         Alpine's fixed directiveOrder: for < model < show < if) — so if
+         this block were freshly (re)mounted via x-if every time the
+         modal opens, x-model's very first sync would run before the
+         x-for options exist yet, silently falling back to the empty
+         "— Keine Quelle —" option. Mounting once at load sidesteps the
+         race entirely; every later modalQuelle change re-syncs fine
+         against an already-populated <select>. -->
       <div>
         <!-- Header -->
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-right:32px;">
-          <span style="font-size:16px;font-weight:600;color:#fff;" x-text="expandedTrade.instrument || 'Gold'"></span>
-          <span class="badge" :class="expandedTrade.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
-            x-text="expandedTrade.open_direction==='BUY' ? 'Long' : 'Short'"></span>
-          <span class="mono" style="font-size:13px;color:var(--muted);">Entry <span style="color:var(--text);" x-text="formatPrice(expandedTrade.entry_price)"></span></span>
+          <span style="font-size:16px;font-weight:600;color:#fff;" x-text="expandedTrade?.instrument || 'Gold'"></span>
+          <span class="badge" :class="expandedTrade?.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
+            x-text="expandedTrade?.open_direction==='BUY' ? 'Long' : 'Short'"></span>
+          <span class="mono" style="font-size:13px;color:var(--muted);">Entry <span style="color:var(--text);" x-text="formatPrice(expandedTrade?.entry_price)"></span></span>
           <span class="mono" style="font-size:15px;font-weight:500;margin-left:auto;">
-            <span x-show="expandedTrade.pl_chf===null||expandedTrade.pl_chf===undefined" class="openpos">offen</span>
-            <span x-show="expandedTrade.pl_chf!==null&&expandedTrade.pl_chf!==undefined"
-              :class="expandedTrade.pl_chf>=0 ? 'profit' : 'loss'"
-              x-text="formatPL(expandedTrade.pl_chf)+' CHF'"></span>
+            <span x-show="expandedTrade?.pl_chf===null||expandedTrade?.pl_chf===undefined" class="openpos">offen</span>
+            <span x-show="expandedTrade?.pl_chf!==null&&expandedTrade?.pl_chf!==undefined"
+              :class="expandedTrade?.pl_chf>=0 ? 'profit' : 'loss'"
+              x-text="formatPL(expandedTrade?.pl_chf)+' CHF'"></span>
           </span>
         </div>
 
@@ -899,7 +1039,7 @@ function journal() {
             <div style="display:flex;flex-direction:column;gap:12px;">
               <div>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Quelle</div>
-                <select style="width:100%;" x-model="tagForm[expandedId+'_q']">
+                <select style="width:100%;" x-model="modalQuelle">
                   <option value="">— Keine Quelle —</option>
                   <template x-for="q in sourcesForTrade(expandedTrade)" :key="q">
                     <option :value="q" :disabled="!quellen.includes(q)"
@@ -910,11 +1050,11 @@ function journal() {
               <div>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Notiz</div>
                 <input type="text" style="width:100%;" placeholder="Optionale Notiz..."
-                  x-model="tagForm[expandedId+'_n']">
+                  x-model="modalNotiz">
               </div>
               <div style="display:flex;align-items:center;gap:10px;">
                 <button class="btn-primary"
-                  @click="saveTag(expandedId, tagForm[expandedId+'_q'], tagForm[expandedId+'_n'])">
+                  @click="saveTag(expandedId, modalQuelle, modalNotiz)">
                   Speichern
                 </button>
                 <span x-show="saveStatus[expandedId]" class="profit"
@@ -925,7 +1065,6 @@ function journal() {
 
         </div>
       </div>
-    </template>
   </div>
 </div>
 </body>
