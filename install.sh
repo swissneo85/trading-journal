@@ -85,11 +85,17 @@ cp "$APP_DIR/www/index.html" "$WEB_ROOT/"
 PHP_VERSION=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
 FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 
+# ---- PHP-FPM: Upload-Limits anheben (Standard 8M ist zu klein fuer grosse CSV-Importe) ----
+PHP_INI="/etc/php/${PHP_VERSION}/fpm/php.ini"
+sed -i 's/^post_max_size = .*/post_max_size = 20M/' "$PHP_INI"
+sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 20M/' "$PHP_INI"
+
 # ---- Nginx: interner Block für Laravel API (127.0.0.1:8001) ----
 cat > /etc/nginx/sites-available/trading-journal-api << EOF
 server {
     listen 127.0.0.1:8001;
     server_name _;
+    client_max_body_size 20m;
     root $APP_DIR/backend/public;
     index index.php;
 
@@ -110,6 +116,7 @@ cat > /etc/nginx/sites-available/trading-journal << EOF
 server {
     listen 8080;
     server_name _;
+    client_max_body_size 20m;
     root $WEB_ROOT;
     index index.html;
 
