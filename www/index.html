@@ -41,7 +41,6 @@
     .badge-purple{background: rgba(168,85,247,.12); color: #c084fc; border: 1px solid rgba(168,85,247,.2); }
     .badge-red  { background: rgba(239,68,68,.12);  color: #f87171; border: 1px solid rgba(239,68,68,.2); }
     tr.trade-row:hover td { background: rgba(59,130,246,.04); cursor: pointer; }
-    tr.detail-row td { background: #090f1d; }
     .tab-btn { padding: 4px 0; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all .15s; color: var(--muted); background: none; border-top: none; border-left: none; border-right: none; cursor: pointer; }
     .tab-btn.active { color: #fff; border-bottom-color: var(--accent); }
     input, select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 12px; font-size: 13px; outline: none; font-family: 'Inter', sans-serif; }
@@ -190,9 +189,8 @@
             <th class="mono">DAUER</th>
           </tr>
         </thead>
-        <template x-for="trade in filteredTrades" :key="trade.deal_id">
-          <tbody>
-            <!-- Main row -->
+        <tbody>
+          <template x-for="trade in filteredTrades" :key="trade.deal_id">
             <tr class="trade-row" @click="toggleDetail(trade.deal_id)">
               <td class="mono" style="font-size:12px;" x-text="formatDate(trade.open_time)"></td>
               <td style="font-weight:500;color:#fff;" x-text="trade.instrument || 'Gold'"></td>
@@ -212,7 +210,7 @@
                   <span>
                     <template x-for="r in trade.exit_reasons.split(',')" :key="r">
                       <span class="badge mr-1"
-                        :class="r==='SL'?'badge-sl':r==='TP'?'badge-tp':'badge-user'"
+                        :class="exitBadgeClass(r.trim(), trade.pl_chf)"
                         x-text="r.trim()"></span>
                     </template>
                   </span>
@@ -225,93 +223,8 @@
               </td>
               <td class="mono" style="font-size:11px;color:var(--muted);" x-text="formatDuration(trade.open_time, trade.close_time)"></td>
             </tr>
-
-            <!-- Detail row -->
-            <tr class="detail-row" x-show="expandedId===trade.deal_id">
-              <td colspan="8" style="padding:0;">
-                <div style="padding:20px 24px;display:grid;grid-template-columns:1fr 320px;gap:32px;">
-
-                  <!-- Events -->
-                  <div>
-                    <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">EVENTS</div>
-                    <table style="width:100%;border-collapse:collapse;">
-                      <thead>
-                        <tr>
-                          <th class="detail-th" style="padding-left:0;">Typ</th>
-                          <th class="detail-th">Zeit (UTC)</th>
-                          <th class="detail-th mono" style="text-align:right;">Preis</th>
-                          <th class="detail-th mono" style="text-align:right;">Lots</th>
-                          <th class="detail-th">Via</th>
-                          <th class="detail-th mono" style="text-align:right;">P/L</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <template x-if="!detail[trade.deal_id]">
-                          <tr><td colspan="6" class="detail-td" style="color:var(--muted);">Lade...</td></tr>
-                        </template>
-                        <template x-if="detail[trade.deal_id]">
-                          <template x-for="ev in detail[trade.deal_id]" :key="ev.date_utc">
-                            <tr>
-                              <td class="detail-td mono" style="padding-left:0;">
-                                <span x-show="!ev.open_price" style="color:#60a5fa;">Eröffnung</span>
-                                <span x-show="ev.open_price"  style="color:var(--muted);">Schliessung</span>
-                              </td>
-                              <td class="detail-td mono" style="font-size:11px;color:var(--muted);" x-text="formatDateTime(ev.date_utc)"></td>
-                              <td class="detail-td mono" style="text-align:right;" x-text="formatPrice(ev.level)"></td>
-                              <td class="detail-td mono" style="text-align:right;color:var(--muted);" x-text="ev.size||'—'"></td>
-                              <td class="detail-td">
-                                <span x-show="ev.source && ev.open_price" class="badge"
-                                  :class="ev.source==='SL'?'badge-sl':ev.source==='TP'?'badge-tp':'badge-user'"
-                                  x-text="ev.source"></span>
-                                <span x-show="!ev.source || !ev.open_price" style="color:var(--muted);">—</span>
-                              </td>
-                              <td class="detail-td mono" style="text-align:right;">
-                                <span x-show="ev.pl_chf!==null&&ev.pl_chf!==undefined"
-                                  :class="ev.pl_chf>=0?'profit':'loss'"
-                                  x-text="formatPL(ev.pl_chf)+' CHF'"></span>
-                                <span x-show="ev.pl_chf===null||ev.pl_chf===undefined" style="color:var(--muted);">—</span>
-                              </td>
-                            </tr>
-                          </template>
-                        </template>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <!-- Tag Form -->
-                  <div>
-                    <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">TAG & NOTIZ</div>
-                    <div style="display:flex;flex-direction:column;gap:12px;">
-                      <div>
-                        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Quelle</div>
-                        <select style="width:100%;" x-model="tagForm[trade.deal_id+'_q']">
-                          <option value="">— Keine Quelle —</option>
-                          <template x-for="q in quellen" :key="q"><option :value="q" x-text="q"></option></template>
-                          <option x-show="trade.quelle && !quellen.includes(trade.quelle)" disabled
-                            :value="trade.quelle" x-text="trade.quelle + ' (archiviert)'"></option>
-                        </select>
-                      </div>
-                      <div>
-                        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Notiz</div>
-                        <input type="text" style="width:100%;" placeholder="Optionale Notiz..."
-                          x-model="tagForm[trade.deal_id+'_n']">
-                      </div>
-                      <div style="display:flex;align-items:center;gap:10px;">
-                        <button class="btn-primary"
-                          @click="saveTag(trade.deal_id, tagForm[trade.deal_id+'_q'], tagForm[trade.deal_id+'_n'])">
-                          Speichern
-                        </button>
-                        <span x-show="saveStatus[trade.deal_id]" class="profit"
-                          style="font-size:12px;" x-text="saveStatus[trade.deal_id]"></span>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </template>
+          </template>
+        </tbody>
         <tbody x-show="filteredTrades.length===0">
           <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Trades gefunden</td></tr>
         </tbody>
@@ -319,6 +232,114 @@
     </div>
 
   </div><!-- end trades tab -->
+
+  <!-- ───── DETAIL MODAL ───── -->
+  <div x-show="expandedId !== null" x-cloak
+       style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;"
+       @click.self="expandedId = null">
+    <div class="card" style="max-width:900px;width:100%;max-height:85vh;overflow-y:auto;padding:28px;position:relative;">
+      <button @click="expandedId = null"
+              style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">✕</button>
+
+      <template x-if="expandedTrade">
+        <div>
+          <!-- Header -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-right:32px;">
+            <span style="font-size:16px;font-weight:600;color:#fff;" x-text="expandedTrade.instrument || 'Gold'"></span>
+            <span class="badge" :class="expandedTrade.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
+              x-text="expandedTrade.open_direction==='BUY' ? 'Long' : 'Short'"></span>
+            <span class="mono" style="font-size:13px;color:var(--muted);">Entry <span style="color:var(--text);" x-text="formatPrice(expandedTrade.entry_price)"></span></span>
+            <span class="mono" style="font-size:15px;font-weight:500;margin-left:auto;">
+              <span x-show="expandedTrade.pl_chf===null||expandedTrade.pl_chf===undefined" class="openpos">offen</span>
+              <span x-show="expandedTrade.pl_chf!==null&&expandedTrade.pl_chf!==undefined"
+                :class="expandedTrade.pl_chf>=0 ? 'profit' : 'loss'"
+                x-text="formatPL(expandedTrade.pl_chf)+' CHF'"></span>
+            </span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 320px;gap:32px;">
+
+            <!-- Events -->
+            <div>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">EVENTS</div>
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th class="detail-th" style="padding-left:0;">Typ</th>
+                    <th class="detail-th">Zeit (UTC)</th>
+                    <th class="detail-th mono" style="text-align:right;">Preis</th>
+                    <th class="detail-th mono" style="text-align:right;">Lots</th>
+                    <th class="detail-th">Via</th>
+                    <th class="detail-th mono" style="text-align:right;">P/L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-if="!detail[expandedId]">
+                    <tr><td colspan="6" class="detail-td" style="color:var(--muted);">Lade...</td></tr>
+                  </template>
+                  <template x-if="detail[expandedId]">
+                    <template x-for="ev in detail[expandedId]" :key="ev.date_utc">
+                      <tr>
+                        <td class="detail-td mono" style="padding-left:0;">
+                          <span x-show="!ev.open_price" style="color:#60a5fa;">Eröffnung</span>
+                          <span x-show="ev.open_price"  style="color:var(--muted);">Schliessung</span>
+                        </td>
+                        <td class="detail-td mono" style="font-size:11px;color:var(--muted);" x-text="formatDateTime(ev.date_utc)"></td>
+                        <td class="detail-td mono" style="text-align:right;" x-text="formatPrice(ev.level)"></td>
+                        <td class="detail-td mono" style="text-align:right;color:var(--muted);" x-text="ev.size||'—'"></td>
+                        <td class="detail-td">
+                          <span x-show="ev.source && ev.open_price" class="badge"
+                            :class="exitBadgeClass(ev.source, ev.pl_chf)"
+                            x-text="ev.source"></span>
+                          <span x-show="!ev.source || !ev.open_price" style="color:var(--muted);">—</span>
+                        </td>
+                        <td class="detail-td mono" style="text-align:right;">
+                          <span x-show="ev.pl_chf!==null&&ev.pl_chf!==undefined"
+                            :class="ev.pl_chf>=0?'profit':'loss'"
+                            x-text="formatPL(ev.pl_chf)+' CHF'"></span>
+                          <span x-show="ev.pl_chf===null||ev.pl_chf===undefined" style="color:var(--muted);">—</span>
+                        </td>
+                      </tr>
+                    </template>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Tag Form -->
+            <div>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">TAG & NOTIZ</div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                  <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Quelle</div>
+                  <select style="width:100%;" x-model="tagForm[expandedId+'_q']">
+                    <option value="">— Keine Quelle —</option>
+                    <template x-for="q in quellen" :key="q"><option :value="q" x-text="q"></option></template>
+                    <option x-show="expandedTrade.quelle && !quellen.includes(expandedTrade.quelle)" disabled
+                      :value="expandedTrade.quelle" x-text="expandedTrade.quelle + ' (archiviert)'"></option>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Notiz</div>
+                  <input type="text" style="width:100%;" placeholder="Optionale Notiz..."
+                    x-model="tagForm[expandedId+'_n']">
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <button class="btn-primary"
+                    @click="saveTag(expandedId, tagForm[expandedId+'_q'], tagForm[expandedId+'_n'])">
+                    Speichern
+                  </button>
+                  <span x-show="saveStatus[expandedId]" class="profit"
+                    style="font-size:12px;" x-text="saveStatus[expandedId]"></span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
 
   <!-- ───── IMPORT TAB ───── -->
   <div x-show="!loading && tab==='import'" style="max-width:600px;margin:0 auto;">
@@ -522,6 +543,23 @@ function journal() {
         await this.loadData();
         this.renderChart();
       }, 30000);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') this.expandedId = null;
+      });
+    },
+
+    get expandedTrade() {
+      return this.trades.find(t => t.deal_id === this.expandedId);
+    },
+
+    exitBadgeClass(reason, pl) {
+      if (reason === 'SL') {
+        // SL-Grund farblich nach tatsächlichem Ergebnis, nicht pauschal rot
+        if (pl === null || pl === undefined) return 'badge-sl';
+        return pl >= 0 ? 'badge-tp' : 'badge-sl'; // badge-tp Klasse = grün, badge-sl Klasse = rot
+      }
+      if (reason === 'TP') return 'badge-tp';
+      return 'badge-user';
     },
 
     async loadData() {
