@@ -56,8 +56,8 @@ class PollCapitalPositions extends Command
             }
         }
 
-        if ($closedIds) {
-            $this->syncAfterClose($historySync);
+        if ($newIds || $closedIds) {
+            $this->syncPositionChange($historySync, (bool) $newIds, (bool) $closedIds);
         }
 
         Cache::put('known_deal_ids', $currentIds, now()->addDays(7));
@@ -70,13 +70,17 @@ class PollCapitalPositions extends Command
         return self::SUCCESS;
     }
 
-    private function syncAfterClose(HistorySyncService $historySync): void
+    private function syncPositionChange(HistorySyncService $historySync, bool $hasNew, bool $hasClosed): void
     {
         try {
             $result = $historySync->sync(3600);
 
+            $reason = $hasNew && $hasClosed
+                ? 'neue Position(en) + Schliessung(en)'
+                : ($hasNew ? 'neue Position(en)' : 'Schliessung(en)');
+
             ActivityLog::log('history_fetch',
-                'Sofort-Abruf nach Schliessung: '.$result['activities'].' Activities, '.
+                'Sofort-Abruf nach '.$reason.': '.$result['activities'].' Activities, '.
                 $result['transactions'].' Transactions');
         } catch (Throwable $e) {
             Log::warning('PollCapitalPositions: Sofort-Abruf fehlgeschlagen: '.$e->getMessage());
