@@ -447,6 +447,7 @@ function journal() {
     importStatus: '',
     importError: '',
     chartInstance: null,
+    _chartRenderPending: false,
     triggering: false,
     triggerStatus: '',
 
@@ -469,17 +470,14 @@ function journal() {
 
     async init() {
       this.$watch('loading', (val) => {
-        if (!val) {
-          clearTimeout(this._chartTimer);
-          this._chartTimer = setTimeout(() => this.renderChart(), 500);
-        }
+        if (!val) this.refreshChart();
       });
       await this.loadData();
       setInterval(() => { if (this.tab === 'log') this.loadLog(); }, 30000);
       setInterval(async () => {
         if (this.expandedId !== null) return; // Modal offen, User tippt evtl. gerade
         await this.loadData();
-        this.renderChart();
+        this.refreshChart();
       }, 30000);
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') this.expandedId = null;
@@ -592,7 +590,7 @@ function journal() {
         const result = await res.json();
         this.triggerStatus = result.message || '✅ Ausgelöst';
         await this.loadData();
-        setTimeout(() => this.renderChart(), 400);
+        this.refreshChart();
       } catch(e) {
         this.triggerStatus = '❌ Fehler: ' + e.message;
       } finally {
@@ -636,6 +634,20 @@ function journal() {
         avgWin:   Math.round(avgWin  * 100) / 100,
         avgLoss:  Math.round(avgLoss * 100) / 100
       };
+    },
+
+    // Single funnel for every chart repaint trigger (initial load, auto-
+    // refresh timer, CSV import, trigger buttons, ...): the pending-guard
+    // stops overlapping callers from tearing down chartInstance mid-draw,
+    // which is what made the equity curve intermittently vanish.
+    refreshChart() {
+      if (this._chartRenderPending) return;
+      this._chartRenderPending = true;
+      clearTimeout(this._chartTimer);
+      this._chartTimer = setTimeout(() => {
+        this.renderChart();
+        this._chartRenderPending = false;
+      }, 350);
     },
 
     renderChart() {
@@ -852,7 +864,7 @@ function journal() {
         const result = await res.json();
         this.importStatus = result.message || 'Import abgeschlossen';
         await this.loadData();
-        setTimeout(() => this.renderChart(), 400);
+        this.refreshChart();
       } catch(e) {
         this.importError = '❌ Fehler: ' + e.message;
       }
