@@ -81,7 +81,10 @@ class HistorySyncService
                     'date_utc' => $transaction['dateUtc'] ?? $transaction['date'] ?? null,
                     'instrument' => $transaction['instrumentName'] ?? null,
                     'transaction_type' => $type,
-                    'pl_chf' => $transaction['profitAndLoss'] ?? null,
+                    // Despite the name, Capital.com's transaction "size" field
+                    // holds the P/L value in CHF for TRADE rows — there is no
+                    // separate profitAndLoss field on this endpoint.
+                    'pl_chf' => isset($transaction['size']) ? (float) $transaction['size'] : null,
                     'note' => $transaction['note'] ?? null,
                 ]
             );
