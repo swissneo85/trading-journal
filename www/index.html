@@ -510,10 +510,12 @@ function journal() {
 
     async init() {
       this.$watch('loading', (val) => {
-        if (!val) setTimeout(() => this.renderChart(), 400);
+        if (!val) {
+          clearTimeout(this._chartTimer);
+          this._chartTimer = setTimeout(() => this.renderChart(), 500);
+        }
       });
       await this.loadData();
-      this.$nextTick(() => this.renderChart());
       setInterval(() => { if (this.tab === 'log') this.loadLog(); }, 30000);
     },
 
