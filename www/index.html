@@ -517,6 +517,11 @@ function journal() {
       });
       await this.loadData();
       setInterval(() => { if (this.tab === 'log') this.loadLog(); }, 30000);
+      setInterval(async () => {
+        if (this.expandedId !== null) return; // Modal offen, User tippt evtl. gerade
+        await this.loadData();
+        this.renderChart();
+      }, 30000);
     },
 
     async loadData() {
