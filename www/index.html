@@ -780,15 +780,24 @@ function journal() {
       this.loadSettings();
     },
 
+    parseTimestamp(iso) {
+      // Timestamps without any zone info (e.g. Capital.com's date_utc) are
+      // implicitly UTC and need a 'Z' appended; timestamps that already carry
+      // 'Z' or an explicit +HH:MM/-HH:MM offset (e.g. Carbon's
+      // toIso8601String()) must be left untouched or Date parsing fails.
+      const hasZone = /Z$|[+-]\d{2}:\d{2}$/.test(iso);
+      return new Date(hasZone ? iso : iso + 'Z');
+    },
+
     formatDate(iso) {
       if (!iso) return '—';
-      const d = new Date(iso.includes('Z') ? iso : iso + 'Z');
+      const d = this.parseTimestamp(iso);
       return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit', year:'2-digit' });
     },
 
     formatDateTime(iso) {
       if (!iso) return '—';
-      const d = new Date(iso.includes('Z') ? iso : iso + 'Z');
+      const d = this.parseTimestamp(iso);
       return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit' }) + ' ' +
              d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit' });
     },
