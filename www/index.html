@@ -408,7 +408,8 @@ function journal() {
     filter: { instrument:'', direction:'', quelle:'', result:'', dateFrom:'', dateTo:'' },
     expandedId: null,
     detail: {},
-    tagForm: {},
+    modalQuelle: '',
+    modalNotiz: '',
     saveStatus: {},
     quellen: [],
     allSources: [],
@@ -488,10 +489,6 @@ function journal() {
           this.loadSources()
         ]);
         this.trades = await tRes.json();
-        this.trades.forEach(t => {
-          this.tagForm[t.deal_id + '_q'] = t.quelle  || '';
-          this.tagForm[t.deal_id + '_n'] = t.notiz   || '';
-        });
       } catch(e) {
         console.error('Ladefehler:', e);
       }
@@ -669,6 +666,9 @@ function journal() {
     async toggleDetail(dealId) {
       if (this.expandedId === dealId) { this.expandedId = null; return; }
       this.expandedId = dealId;
+      const trade = this.trades.find(t => t.deal_id === dealId);
+      this.modalQuelle = trade?.quelle || '';
+      this.modalNotiz = trade?.notiz || '';
       if (!this.detail[dealId]) {
         try {
           const res = await fetch(API + '/detail?dealId=' + encodeURIComponent(dealId));
@@ -899,7 +899,7 @@ function journal() {
             <div style="display:flex;flex-direction:column;gap:12px;">
               <div>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Quelle</div>
-                <select style="width:100%;" x-model="tagForm[expandedId+'_q']">
+                <select style="width:100%;" x-model="modalQuelle">
                   <option value="">— Keine Quelle —</option>
                   <template x-for="q in sourcesForTrade(expandedTrade)" :key="q">
                     <option :value="q" :disabled="!quellen.includes(q)"
@@ -910,11 +910,11 @@ function journal() {
               <div>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Notiz</div>
                 <input type="text" style="width:100%;" placeholder="Optionale Notiz..."
-                  x-model="tagForm[expandedId+'_n']">
+                  x-model="modalNotiz">
               </div>
               <div style="display:flex;align-items:center;gap:10px;">
                 <button class="btn-primary"
-                  @click="saveTag(expandedId, tagForm[expandedId+'_q'], tagForm[expandedId+'_n'])">
+                  @click="saveTag(expandedId, modalQuelle, modalNotiz)">
                   Speichern
                 </button>
                 <span x-show="saveStatus[expandedId]" class="profit"
