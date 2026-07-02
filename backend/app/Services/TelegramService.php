@@ -50,4 +50,18 @@ class TelegramService
             ])
             ->json();
     }
+
+    public function getUpdates(int $offset = 0): array
+    {
+        if (empty($this->botToken)) {
+            return [];
+        }
+
+        $response = Http::get("https://api.telegram.org/bot{$this->botToken}/getUpdates", [
+            'offset' => $offset,
+            'timeout' => 0, // kurzes Polling reicht, laeuft eh jede Minute
+        ]);
+
+        return $response->json('result', []);
+    }
 }
