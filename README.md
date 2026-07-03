@@ -21,6 +21,27 @@ Beim ersten Aufruf der Weboberfläche (`http://<IP>:8080`) den Settings-Tab öff
 und Capital.com- sowie Telegram-Zugangsdaten eintragen — diese werden in der
 Datenbank gepflegt, nicht in `.env`.
 
+## Updates
+
+Es gibt kein Auto-Deploy — nach jedem Merge auf `main` muss der Container
+manuell aktualisiert werden. `<CTID>` ist die Container-ID aus `pct list`
+auf dem Proxmox-Host (Standard beim Setup: `110`).
+
+**Nur Frontend geändert** (z.B. `www/index.html`) — reicht ein `git pull` +
+Kopieren der statischen Datei, kein Neustart nötig:
+```bash
+pct exec <CTID> -- bash -c "cd /opt/trading-journal && git pull && cp www/index.html /var/www/trading-journal/"
+```
+
+**Backend geändert** (`backend/`, Migrations, `.php`-Dateien) — komplett
+`install.sh` erneut laufen lassen (idempotent, zieht auch Composer-Abhängigkeiten
+und Migrationen nach):
+```bash
+pct exec <CTID> -- bash -c "cd /opt/trading-journal && git pull && bash install.sh"
+```
+
+Danach im Browser einen harten Reload machen (Safari/Chrome cachen aggressiv).
+
 ## Struktur
 - `backend/` — Laravel-API (Trades, Import, Settings, Telegram-Webhook), SQLite-Datei
   unter `data/journal.sqlite`
