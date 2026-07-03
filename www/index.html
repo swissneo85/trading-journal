@@ -201,6 +201,7 @@
             <th>INSTRUMENT</th>
             <th>RICHTUNG</th>
             <th style="text-align:right;" class="mono">ENTRY</th>
+            <th style="text-align:right;" class="mono">EXIT Ø</th>
             <th style="text-align:right;" class="mono">P/L CHF</th>
             <th>GRUND</th>
             <th>QUELLE</th>
@@ -210,13 +211,14 @@
         <tbody>
           <template x-for="trade in filteredTrades" :key="trade.deal_id">
             <tr class="trade-row" @click="toggleDetail(trade.deal_id)">
-              <td class="mono" style="font-size:12px;" x-text="formatDate(trade.open_time)"></td>
+              <td class="mono" style="font-size:12px;" x-text="formatDateTimeFull(trade.open_time)"></td>
               <td style="font-weight:500;color:#fff;" x-text="trade.instrument || 'Gold'"></td>
               <td>
                 <span class="badge" :class="trade.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
                   x-text="trade.open_direction==='BUY' ? 'Long' : 'Short'"></span>
               </td>
               <td class="mono" style="text-align:right;" x-text="formatPrice(trade.entry_price)"></td>
+              <td class="mono" style="text-align:right;color:var(--muted);" x-text="formatPrice(trade.exit_price_avg)"></td>
               <td class="mono" style="text-align:right;font-weight:500;">
                 <span x-show="trade.pl_chf===null||trade.pl_chf===undefined" class="openpos">offen</span>
                 <span x-show="trade.pl_chf!==null&&trade.pl_chf!==undefined"
@@ -244,7 +246,7 @@
           </template>
         </tbody>
         <tbody x-show="filteredTrades.length===0">
-          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Trades gefunden</td></tr>
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Trades gefunden</td></tr>
         </tbody>
       </table>
     </div>
@@ -926,6 +928,7 @@ function journal() {
     },
 
     formatDate(iso) {
+      // Date-only, no time — kept short for the equity chart's x-axis labels.
       if (!iso) return '—';
       const d = this.parseTimestamp(iso);
       return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit', year:'2-digit' });
@@ -935,7 +938,16 @@ function journal() {
       if (!iso) return '—';
       const d = this.parseTimestamp(iso);
       return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit' }) + ' ' +
-             d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit' });
+             d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    },
+
+    formatDateTimeFull(iso) {
+      // Full date (with year) + time incl. seconds — used for the trades
+      // table's DATUM column.
+      if (!iso) return '—';
+      const d = this.parseTimestamp(iso);
+      return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit', year:'2-digit' }) + ' ' +
+             d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     },
 
     formatPrice(n) {
