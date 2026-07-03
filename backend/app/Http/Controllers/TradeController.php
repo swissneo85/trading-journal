@@ -15,6 +15,11 @@ class TradeController extends Controller
     // implementation used for its (broken) SQL correlation.
     private const MATCH_TOLERANCE_SECONDS = 2;
 
+    // Rounding-error tolerance when comparing the sum of closed lot sizes
+    // against the original opening size to decide whether a position is
+    // fully closed.
+    private const SIZE_TOLERANCE = 0.001;
+
     public function index()
     {
         $trades = DB::select(<<<'SQL'
@@ -26,7 +31,19 @@ class TradeController extends Controller
                 fm.level AS entry_price,
                 COALESCE(ex.num_exits, 0) AS num_exits,
                 ex.exit_reasons AS exit_reasons,
-                ex.close_time AS close_time,
+                -- A position is only "closed" once every opened lot has a
+                -- matching closing activity — a partial close (closed_size
+                -- < opening size) must keep showing as open, not as a
+                -- finished trade with a fixed duration.
+                CASE
+                    WHEN COALESCE(ex.closed_size, 0) <= 0 THEN 'open'
+                    WHEN COALESCE(ex.closed_size, 0) >= fm.size - ? THEN 'closed'
+                    ELSE 'partial'
+                END AS status,
+                CASE
+                    WHEN COALESCE(ex.closed_size, 0) >= fm.size - ? THEN ex.close_time
+                    ELSE NULL
+                END AS close_time,
                 ex.exit_price_avg AS exit_price_avg,
                 (
                     SELECT SUM(t.pl_chf) FROM transactions t
@@ -46,6 +63,7 @@ class TradeController extends Controller
                        COUNT(*) AS num_exits,
                        GROUP_CONCAT(DISTINCT a.source) AS exit_reasons,
                        MAX(a.date_utc) AS close_time,
+                       SUM(a.size) AS closed_size,
                        -- Size-weighted average exit price across every
                        -- closing activity for this deal (a single close
                        -- collapses to just that close's level).
@@ -59,7 +77,7 @@ class TradeController extends Controller
             ) ex ON ex.deal_id = fm.deal_id
             LEFT JOIN trade_tags tg ON tg.deal_id = fm.deal_id
             ORDER BY fm.date_utc DESC
-        SQL);
+        SQL, [self::SIZE_TOLERANCE, self::SIZE_TOLERANCE]);
 
         return response()->json($trades);
     }
