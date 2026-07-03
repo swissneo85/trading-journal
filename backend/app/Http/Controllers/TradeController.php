@@ -20,6 +20,7 @@ class TradeController extends Controller
                 COALESCE(ex.num_exits, 0) AS num_exits,
                 ex.exit_reasons AS exit_reasons,
                 ex.close_time AS close_time,
+                ex.exit_price_avg AS exit_price_avg,
                 (
                     SELECT SUM(t.pl_chf) FROM transactions t
                     WHERE t.deal_id = fm.deal_id AND t.transaction_type = 'TRADE'
@@ -37,7 +38,11 @@ class TradeController extends Controller
                 SELECT a.deal_id AS deal_id,
                        COUNT(*) AS num_exits,
                        GROUP_CONCAT(DISTINCT a.source) AS exit_reasons,
-                       MAX(a.date_utc) AS close_time
+                       MAX(a.date_utc) AS close_time,
+                       -- Size-weighted average exit price across every
+                       -- closing activity for this deal (a single close
+                       -- collapses to just that close's level).
+                       SUM(a.level * a.size) / NULLIF(SUM(a.size), 0) AS exit_price_avg
                 FROM activities a
                 INNER JOIN (
                     SELECT deal_id, MIN(date_utc) AS min_date FROM activities GROUP BY deal_id
