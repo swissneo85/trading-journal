@@ -40,4 +40,66 @@ class TradeControllerTest extends TestCase
         $this->assertEquals(110.0, $trades['D2']['exit_price_avg']);
         $this->assertNull($trades['D3']['exit_price_avg']);
     }
+
+    public function test_partial_close_keeps_position_open_with_no_fixed_close_time(): void
+    {
+        // Exact bug report scenario: 1.0 lot opened short, only 0.25 lots
+        // closed so far — 0.75 lots are still running on Capital.com.
+        Activity::insert([
+            ['deal_id' => 'PARTIAL1', 'date_utc' => '2026-06-01T10:00:00', 'level' => 4184.21, 'open_price' => null, 'size' => 1.0, 'direction' => 'SELL'],
+            ['deal_id' => 'PARTIAL1', 'date_utc' => '2026-06-01T11:03:00', 'level' => 4175.63, 'open_price' => 4184.21, 'size' => 0.25, 'direction' => 'BUY'],
+        ]);
+
+        $trade = collect($this->getJson('/trading/trades')->json())->firstWhere('deal_id', 'PARTIAL1');
+
+        $this->assertSame('partial', $trade['status']);
+        $this->assertNull($trade['close_time'], 'close_time must stay null while lots remain open');
+        $this->assertSame(1, $trade['num_exits']);
+    }
+
+    public function test_position_closed_in_a_single_step_is_reported_as_closed(): void
+    {
+        // Regression guard: a plain, non-partial close (opened and closed
+        // lot sizes match exactly) must still resolve to 'closed' with a
+        // real close_time, exactly as before this fix.
+        Activity::insert([
+            ['deal_id' => 'FULL1', 'date_utc' => '2026-06-01T10:00:00', 'level' => 100.0, 'open_price' => null, 'size' => 1.0, 'direction' => 'BUY'],
+            ['deal_id' => 'FULL1', 'date_utc' => '2026-06-01T11:00:00', 'level' => 105.0, 'open_price' => 100.0, 'size' => 1.0, 'direction' => 'SELL'],
+        ]);
+
+        $trade = collect($this->getJson('/trading/trades')->json())->firstWhere('deal_id', 'FULL1');
+
+        $this->assertSame('closed', $trade['status']);
+        $this->assertSame('2026-06-01T11:00:00', $trade['close_time']);
+    }
+
+    public function test_position_closed_via_multiple_partials_summing_to_full_size_is_closed(): void
+    {
+        // Two partial closes that together account for the whole opened
+        // size must resolve to fully 'closed', not stuck as 'partial'
+        // forever due to floating-point drift (hence SIZE_TOLERANCE).
+        Activity::insert([
+            ['deal_id' => 'FULL2', 'date_utc' => '2026-06-01T10:00:00', 'level' => 100.0, 'open_price' => null, 'size' => 1.0, 'direction' => 'BUY'],
+            ['deal_id' => 'FULL2', 'date_utc' => '2026-06-01T11:00:00', 'level' => 102.0, 'open_price' => 100.0, 'size' => 0.4, 'direction' => 'SELL'],
+            ['deal_id' => 'FULL2', 'date_utc' => '2026-06-01T12:00:00', 'level' => 104.0, 'open_price' => 100.0, 'size' => 0.6, 'direction' => 'SELL'],
+        ]);
+
+        $trade = collect($this->getJson('/trading/trades')->json())->firstWhere('deal_id', 'FULL2');
+
+        $this->assertSame('closed', $trade['status']);
+        $this->assertSame('2026-06-01T12:00:00', $trade['close_time']);
+    }
+
+    public function test_fully_open_position_with_zero_exits_is_reported_as_open(): void
+    {
+        Activity::insert([
+            ['deal_id' => 'OPEN1', 'date_utc' => '2026-06-01T10:00:00', 'level' => 50.0, 'open_price' => null, 'size' => 2.0, 'direction' => 'BUY'],
+        ]);
+
+        $trade = collect($this->getJson('/trading/trades')->json())->firstWhere('deal_id', 'OPEN1');
+
+        $this->assertSame('open', $trade['status']);
+        $this->assertNull($trade['close_time']);
+        $this->assertSame(0, $trade['num_exits']);
+    }
 }
