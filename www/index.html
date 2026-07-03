@@ -241,7 +241,7 @@
                 <span x-show="trade.quelle" class="badge badge-src" x-text="trade.quelle"></span>
                 <span x-show="!trade.quelle" style="color:var(--muted);">—</span>
               </td>
-              <td class="mono" style="font-size:11px;color:var(--muted);" x-text="formatDuration(trade.open_time, trade.close_time)"></td>
+              <td class="mono" style="font-size:11px;color:var(--muted);" x-text="formatDuration(trade.open_time, trade.close_time, trade.status)"></td>
             </tr>
           </template>
         </tbody>
@@ -602,7 +602,10 @@ function journal() {
 
     get filteredTrades() {
       return this.trades.filter(t => {
-        const isOpen   = t.pl_chf === null || t.pl_chf === undefined;
+        // A partially-closed position (status==='partial') still has
+        // capital at risk — treat it as "open" everywhere, not as a
+        // finished win/loss, until every lot is closed.
+        const isOpen   = t.status !== 'closed';
         const isProfit = !isOpen && t.pl_chf > 0;
         const isLoss   = !isOpen && t.pl_chf < 0;
         if (this.filter.instrument && (t.instrument||'Gold') !== this.filter.instrument) return false;
@@ -619,8 +622,8 @@ function journal() {
     },
 
     get kpis() {
-      const closed = this.filteredTrades.filter(t => t.pl_chf !== null && t.pl_chf !== undefined);
-      const open   = this.filteredTrades.filter(t => t.pl_chf === null || t.pl_chf === undefined);
+      const closed = this.filteredTrades.filter(t => t.status === 'closed');
+      const open   = this.filteredTrades.filter(t => t.status !== 'closed');
       const wins   = closed.filter(t => t.pl_chf > 0);
       const losses = closed.filter(t => t.pl_chf < 0);
       const totalPL = closed.reduce((s, t) => s + (t.pl_chf || 0), 0);
@@ -960,8 +963,12 @@ function journal() {
       return (n >= 0 ? '+' : '') + Number(n).toFixed(2);
     },
 
-    formatDuration(open, close) {
-      if (!close) return 'offen';
+    formatDuration(open, close, status) {
+      // close_time is only ever set once every lot is closed (see
+      // TradeController::index()), so a partially-closed position always
+      // lands here too — distinguish it from a fully-open one instead of
+      // showing a fixed duration for capital that's still at risk.
+      if (!close) return status === 'partial' ? 'offen (teilw.)' : 'offen';
       const ms = new Date(close + 'Z') - new Date(open + 'Z');
       const m  = Math.floor(ms / 60000);
       if (m < 60) return m + 'm';
