@@ -192,8 +192,8 @@
       </div>
     </div>
 
-    <!-- Trade Table -->
-    <div class="card" style="overflow:hidden;">
+    <!-- Trade Table (desktop, >= md) -->
+    <div class="card hidden md:block" style="overflow:hidden;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr>
@@ -249,6 +249,69 @@
           <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Trades gefunden</td></tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Trade Cards (mobile, < md) -->
+    <div class="flex flex-col gap-2.5 md:hidden">
+      <template x-for="trade in filteredTrades" :key="trade.deal_id">
+        <div class="card" style="padding:14px;cursor:pointer;"
+          :style="trade.status !== 'closed' ? 'border-left:3px solid var(--open);' : ''"
+          @click="toggleDetail(trade.deal_id)">
+
+          <!-- Instrument + Richtung + P/L -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              <span style="font-weight:500;color:#fff;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="trade.instrument || 'Gold'"></span>
+              <span class="badge" :class="trade.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
+                x-text="trade.open_direction==='BUY' ? 'Long' : 'Short'"></span>
+            </div>
+            <span class="mono" style="font-size:16px;font-weight:600;white-space:nowrap;flex-shrink:0;">
+              <span x-show="trade.pl_chf===null||trade.pl_chf===undefined" class="openpos">offen</span>
+              <span x-show="trade.pl_chf!==null&&trade.pl_chf!==undefined"
+                :class="trade.pl_chf>=0 ? 'profit' : 'loss'"
+                x-text="formatPL(trade.pl_chf)+' CHF'"></span>
+            </span>
+          </div>
+
+          <!-- Kompakte Kennzahlen -->
+          <div class="mono" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;font-size:12px;margin-top:12px;">
+            <div>
+              <div style="color:var(--muted);margin-bottom:2px;">ENTRY → EXIT Ø</div>
+              <div style="color:var(--text);" x-text="formatPrice(trade.entry_price) + ' → ' + formatPrice(trade.exit_price_avg)"></div>
+            </div>
+            <div style="text-align:right;">
+              <div style="color:var(--muted);margin-bottom:2px;">DATUM</div>
+              <div style="color:var(--text);" x-text="formatDateTimeFull(trade.open_time)"></div>
+            </div>
+            <div>
+              <div style="color:var(--muted);margin-bottom:2px;">DAUER</div>
+              <div style="color:var(--text);" x-text="formatDuration(trade.open_time, trade.close_time, trade.status)"></div>
+            </div>
+            <div style="text-align:right;">
+              <div style="color:var(--muted);margin-bottom:2px;">GRUND</div>
+              <div>
+                <template x-if="trade.exit_reasons">
+                  <span>
+                    <template x-for="r in trade.exit_reasons.split(',')" :key="r">
+                      <span class="badge mr-1"
+                        :class="exitBadgeClass(r.trim(), trade.pl_chf)"
+                        x-text="r.trim()"></span>
+                    </template>
+                  </span>
+                </template>
+                <span x-show="!trade.exit_reasons" style="color:var(--muted);">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quelle -->
+          <div style="margin-top:10px;">
+            <span x-show="trade.quelle" class="badge badge-src" x-text="trade.quelle"></span>
+            <span x-show="!trade.quelle" style="font-size:11px;color:var(--muted);">Keine Quelle</span>
+          </div>
+        </div>
+      </template>
+      <div x-show="filteredTrades.length===0" class="card" style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Keine Trades gefunden</div>
     </div>
 
   </div><!-- end trades tab -->
