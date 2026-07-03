@@ -110,10 +110,10 @@
 
 <!-- ───── HEADER ───── -->
 <header style="background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;">
-  <div style="max-width:1280px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;">
+  <div class="flex flex-wrap items-center justify-between gap-y-2 py-2 md:py-0 md:h-14" style="max-width:1280px;margin:0 auto;padding-left:24px;padding-right:24px;">
     <div style="display:flex;align-items:center;gap:12px;">
       <span style="font-size:15px;font-weight:600;color:#fff;letter-spacing:-.01em;">📈 Trading Journal</span>
-      <span class="mono" style="font-size:11px;color:var(--muted);">Capital.com · CHF</span>
+      <span class="mono hidden md:inline" style="font-size:11px;color:var(--muted);">Capital.com · CHF</span>
     </div>
     <nav style="display:flex;gap:24px;">
       <button class="tab-btn" :class="tab==='trades'?'active':''" @click="tab='trades'">Trades</button>
@@ -135,35 +135,35 @@
   <div x-show="!loading && tab==='trades'">
 
     <!-- KPI Cards -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px;">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
 
-      <div class="card" style="padding:20px;">
+      <div class="card p-3 md:p-5">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">GESAMT P/L</div>
-        <div class="mono" style="font-size:26px;font-weight:500;"
+        <div class="mono text-[19px] md:text-[26px]" style="font-weight:500;"
           :class="kpis.totalPL >= 0 ? 'glow-profit' : 'glow-loss'"
           x-text="formatPL(kpis.totalPL) + ' CHF'"></div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px;" x-text="kpis.closed + ' abgeschlossen'"></div>
       </div>
 
-      <div class="card" style="padding:20px;">
+      <div class="card p-3 md:p-5">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">WIN RATE</div>
-        <div class="mono" style="font-size:26px;font-weight:500;color:#fff;" x-text="kpis.winRate + '%'"></div>
+        <div class="mono text-[19px] md:text-[26px]" style="font-weight:500;color:#fff;" x-text="kpis.winRate + '%'"></div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px;" x-text="kpis.wins + 'W · ' + kpis.losses + 'L'"></div>
       </div>
 
-      <div class="card" style="padding:20px;">
+      <div class="card p-3 md:p-5">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">Ø GEWINN</div>
-        <div class="mono profit" style="font-size:26px;font-weight:500;" x-text="formatPL(kpis.avgWin) + ' CHF'"></div>
+        <div class="mono profit text-[19px] md:text-[26px]" style="font-weight:500;" x-text="formatPL(kpis.avgWin) + ' CHF'"></div>
       </div>
 
-      <div class="card" style="padding:20px;">
+      <div class="card p-3 md:p-5">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">Ø VERLUST</div>
-        <div class="mono loss" style="font-size:26px;font-weight:500;" x-text="formatPL(kpis.avgLoss) + ' CHF'"></div>
+        <div class="mono loss text-[19px] md:text-[26px]" style="font-weight:500;" x-text="formatPL(kpis.avgLoss) + ' CHF'"></div>
       </div>
 
-      <div class="card" style="padding:20px;">
+      <div class="card p-3 md:p-5">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em;">OFFEN</div>
-        <div class="mono openpos" style="font-size:26px;font-weight:500;" x-text="kpis.open"></div>
+        <div class="mono openpos text-[19px] md:text-[26px]" style="font-weight:500;" x-text="kpis.open"></div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px;">Positionen</div>
       </div>
 
@@ -482,8 +482,8 @@
       <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin:0 0 12px;">QUELLEN VERWALTEN</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
         <template x-for="s in allSources" :key="s.id">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="text" style="flex:1;" :style="s.archived ? 'text-decoration:line-through;color:var(--muted);' : ''"
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <input type="text" style="flex:1;min-width:80px;" :style="s.archived ? 'text-decoration:line-through;color:var(--muted);' : ''"
               x-model="s.name" @change="renameSource(s)">
             <button class="btn-ghost" @click="toggleArchiveSource(s)" x-text="s.archived ? 'Reaktivieren' : 'Archivieren'"></button>
             <button class="btn-ghost" @click="deleteSource(s)">Löschen</button>
@@ -491,8 +491,8 @@
         </template>
         <div x-show="allSources.length===0" style="font-size:12px;color:var(--muted);">Keine Quellen angelegt</div>
       </div>
-      <div style="display:flex;gap:8px;">
-        <input type="text" style="flex:1;" placeholder="Neue Quelle..." x-model="newSourceName" @keydown.enter="addSource()">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" style="flex:1;min-width:80px;" placeholder="Neue Quelle..." x-model="newSourceName" @keydown.enter="addSource()">
         <button class="btn-primary" @click="addSource()">Hinzufügen</button>
       </div>
 
