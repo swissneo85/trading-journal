@@ -10,10 +10,15 @@ use Illuminate\Support\Facades\DB;
 
 class TradeController extends Controller
 {
-    // How close an activity's and a transaction's date_utc must be to be
-    // considered "the same fill" — matches the tolerance the previous
-    // implementation used for its (broken) SQL correlation.
-    private const MATCH_TOLERANCE_SECONDS = 2;
+    // Fallback tolerance for matching an activity to a transaction by time
+    // proximity, only used when rank-based matching (see
+    // matchClosesToTransactions()) doesn't apply because the two sides
+    // don't have the same count. Capital.com's transaction/settlement
+    // timestamp can lag the activity's fill timestamp by an unpredictable
+    // amount (observed to exceed the previous 2s tolerance in production —
+    // it's set generously wide here since this path is already a degraded-
+    // data fallback, and it's still scoped to a single deal_id).
+    private const MATCH_TOLERANCE_SECONDS = 300;
 
     // Rounding-error tolerance when comparing the sum of closed lot sizes
     // against the original opening size to decide whether a position is
@@ -109,28 +114,61 @@ class TradeController extends Controller
 
     /**
      * Pairs each closing activity (open_price IS NOT NULL) with the P/L of
-     * the transaction that represents the same fill. Activities and
-     * transactions for the same close rarely share an identical date_utc
-     * (they're logged by two different Capital.com endpoints), so this
-     * matches on time proximity instead of equality — and does so with a
-     * proper nearest-neighbor assignment (closest pairs first, each side
-     * used at most once) rather than a naive "first match wins" query, so
-     * that with several closes seconds apart no transaction gets double-
-     * counted or attributed to the wrong event.
+     * the transaction that represents the same fill.
      *
-     * Previously this ran as a correlated SQL subquery using
-     * strftime('%s', ...) on both sides, which always returned NULL (and
-     * so pl_chf was always "–" in the UI): SQLite only learned to parse the
-     * 'T' in our ISO-8601 timestamps ("...T10:00:00") inside date functions
-     * as of 3.42.0, and Debian 12's bundled libsqlite3 (3.40.1) predates
-     * that. Carbon::parse() has no such version dependency.
+     * Primary strategy: rank-based. When a deal has exactly as many TRADE
+     * transactions as closing activities, the Nth close (by date_utc) is
+     * paired with the Nth transaction (by date_utc) — Capital.com always
+     * records a position's closes and their transactions in the same
+     * order, even though the transaction's timestamp can lag the
+     * activity's fill timestamp by a large and apparently variable amount
+     * (observed in production to exceed several minutes, not the seconds
+     * this endpoint originally assumed). Rank-based matching needs no
+     * assumption about that lag at all.
+     *
+     * Fallback: if the counts don't match (e.g. a transaction failed to
+     * sync — see the earlier resilience work in HistorySyncService), rank
+     * pairing isn't safe, so fall back to time-proximity matching within
+     * MATCH_TOLERANCE_SECONDS, with a proper nearest-neighbor assignment
+     * (closest pairs first, each side used at most once) so that with
+     * several closes seconds apart no transaction gets double-counted or
+     * attributed to the wrong event.
+     *
+     * Earlier history: this originally ran as a correlated SQL subquery
+     * using strftime('%s', ...) on both sides, which always returned NULL
+     * (so pl_chf was always "–" in the UI) because SQLite only learned to
+     * parse the 'T' in our ISO-8601 timestamps inside date functions as of
+     * 3.42.0, predating Debian 12's bundled libsqlite3 (3.40.1). That was
+     * replaced with the PHP-side proximity matcher below, which then
+     * turned out to still miss real matches because the 2s tolerance it
+     * assumed was too tight — hence the rank-based approach now being
+     * primary.
      *
      * @return array<string, float|null> pl_chf keyed by the activity's date_utc
      */
     private function matchClosesToTransactions(Collection $activities, Collection $transactions): array
     {
-        $closes = $activities->filter(fn ($a) => $a->open_price !== null)->values();
+        $closes = $activities->filter(fn ($a) => $a->open_price !== null)->sortBy('date_utc')->values();
+        $txns = $transactions->sortBy('date_utc')->values();
 
+        if ($closes->isNotEmpty() && $closes->count() === $txns->count()) {
+            $plByDate = [];
+
+            foreach ($closes as $i => $activity) {
+                $plByDate[$activity->date_utc] = $txns[$i]->pl_chf;
+            }
+
+            return $plByDate;
+        }
+
+        return $this->matchClosesByTimeProximity($closes, $txns);
+    }
+
+    /**
+     * @return array<string, float|null> pl_chf keyed by the activity's date_utc
+     */
+    private function matchClosesByTimeProximity(Collection $closes, Collection $transactions): array
+    {
         $candidates = [];
         foreach ($closes as $activity) {
             $activityTime = Carbon::parse($activity->date_utc);
