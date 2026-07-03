@@ -72,6 +72,38 @@
       padding: 24px;
       box-sizing: border-box;
     }
+    .modal-card {
+      max-width: 900px;
+      width: 100%;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 28px;
+      position: relative;
+    }
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 32px;
+    }
+    .modal-events-table th, .modal-events-table td { padding: 5px 6px 5px 0; }
+    @media (max-width: 767px) {
+      /* Full-bleed sheet instead of a centered popup — a fixed 320px side
+         column (see .modal-grid) has no room to sit next to anything on a
+         ~375px phone screen, so it stacks below the events list instead. */
+      .modal-overlay { padding: 0; }
+      .modal-card {
+        max-width: none;
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+        padding: 16px;
+      }
+      .modal-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+    }
   </style>
 </head>
 <body x-data="journal()" x-init="init()" x-cloak>
@@ -1007,6 +1039,16 @@ function journal() {
              d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     },
 
+    formatDateTimeShort(iso) {
+      // Same as formatDateTime but without seconds — used in the detail
+      // modal's events table, where six columns need to fit next to each
+      // other on a narrow screen.
+      if (!iso) return '—';
+      const d = this.parseTimestamp(iso);
+      return d.toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit' }) + ' ' +
+             d.toLocaleTimeString('de-CH', { hour:'2-digit', minute:'2-digit' });
+    },
+
     formatDateTimeFull(iso) {
       // Full date (with year) + time incl. seconds — used for the trades
       // table's DATUM column.
@@ -1047,7 +1089,7 @@ function journal() {
      positioned/transformed ancestor. -->
 <div class="modal-overlay" x-show="expandedId !== null" x-cloak
      @click.self="expandedId = null">
-  <div class="card" style="max-width:900px;width:100%;max-height:85vh;overflow-y:auto;padding:28px;position:relative;">
+  <div class="card modal-card">
     <button @click="expandedId = null"
             style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">✕</button>
 
@@ -1065,7 +1107,7 @@ function journal() {
          against an already-populated <select>. -->
       <div>
         <!-- Header -->
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-right:32px;">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:24px;padding-right:32px;">
           <span style="font-size:16px;font-weight:600;color:#fff;" x-text="expandedTrade?.instrument || 'Gold'"></span>
           <span class="badge" :class="expandedTrade?.open_direction==='BUY' ? 'badge-long' : 'badge-short'"
             x-text="expandedTrade?.open_direction==='BUY' ? 'Long' : 'Short'"></span>
@@ -1078,16 +1120,16 @@ function journal() {
           </span>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 320px;gap:32px;">
+        <div class="modal-grid">
 
           <!-- Events -->
           <div>
             <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted);margin-bottom:12px;">EVENTS</div>
-            <table style="width:100%;border-collapse:collapse;">
+            <table class="modal-events-table" style="width:100%;border-collapse:collapse;">
               <thead>
                 <tr>
                   <th class="detail-th" style="padding-left:0;">Typ</th>
-                  <th class="detail-th">Zeit (UTC)</th>
+                  <th class="detail-th">Zeit</th>
                   <th class="detail-th mono" style="text-align:right;">Preis</th>
                   <th class="detail-th mono" style="text-align:right;">Lots</th>
                   <th class="detail-th">Via</th>
@@ -1105,7 +1147,7 @@ function journal() {
                         <span x-show="!ev.open_price" style="color:#60a5fa;">Eröffnung</span>
                         <span x-show="ev.open_price"  style="color:var(--muted);">Schliessung</span>
                       </td>
-                      <td class="detail-td mono" style="font-size:11px;color:var(--muted);" x-text="formatDateTime(ev.date_utc)"></td>
+                      <td class="detail-td mono" style="font-size:11px;color:var(--muted);" x-text="formatDateTimeShort(ev.date_utc)"></td>
                       <td class="detail-td mono" style="text-align:right;" x-text="formatPrice(ev.level)"></td>
                       <td class="detail-td mono" style="text-align:right;color:var(--muted);" x-text="ev.size||'—'"></td>
                       <td class="detail-td">
@@ -1117,7 +1159,7 @@ function journal() {
                       <td class="detail-td mono" style="text-align:right;">
                         <span x-show="ev.pl_chf!==null&&ev.pl_chf!==undefined"
                           :class="ev.pl_chf>=0?'profit':'loss'"
-                          x-text="formatPL(ev.pl_chf)+' CHF'"></span>
+                          x-text="formatPL(ev.pl_chf)"></span>
                         <span x-show="ev.pl_chf===null||ev.pl_chf===undefined" style="color:var(--muted);">—</span>
                       </td>
                     </tr>
